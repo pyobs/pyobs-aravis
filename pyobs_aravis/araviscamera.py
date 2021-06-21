@@ -2,13 +2,14 @@ import logging
 import time
 import aravis
 
+from pyobs.interfaces import ICameraExposureTime
 from pyobs.modules.camera import BaseWebcam
 
 
 log = logging.getLogger(__name__)
 
 
-class AravisCamera(BaseWebcam):
+class AravisCamera(BaseWebcam, ICameraExposureTime):
     """A pyobs module for Aravis cameras."""
     __module__ = 'pyobs_aravis'
 
@@ -68,6 +69,25 @@ class AravisCamera(BaseWebcam):
 
         # release camera
         self._camera.stop_acquisition()
+
+    def set_exposure_time(self, exposure_time: float, *args, **kwargs):
+        """Set the exposure time in seconds.
+
+        Args:
+            exposure_time: Exposure time in seconds.
+
+        Raises:
+            ValueError: If exposure time could not be set.
+        """
+        self._camera.set_exposure_time(int(exposure_time * 1e6))
+
+    def get_exposure_time(self, *args, **kwargs) -> float:
+        """Returns the exposure time in seconds.
+
+        Returns:
+            Exposure time in seconds.
+        """
+        return self._camera.get_exposure_time() / 1e6
 
 
 __all__ = ['AravisCamera']
