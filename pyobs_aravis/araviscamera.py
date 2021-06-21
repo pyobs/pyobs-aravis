@@ -1,14 +1,8 @@
 import logging
-import numpy as np
-import threading
-from datetime import datetime
 import time
-from typing import Tuple
 import aravis
 
 from pyobs.modules.camera import BaseWebcam
-from pyobs.images import Image
-from pyobs.utils.enums import ExposureStatus
 
 
 log = logging.getLogger(__name__)
