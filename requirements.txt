@@ -1,0 +1,3 @@
+numpy
+PyGObject
+git+https://github.com/SintefManufacturing/python-aravis.git
