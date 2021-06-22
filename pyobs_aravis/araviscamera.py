@@ -3,13 +3,13 @@ import time
 import aravis
 
 from pyobs.interfaces import ICameraExposureTime
-from pyobs.modules.camera import BaseWebcam
+from pyobs.modules.camera import BaseVideo
 
 
 log = logging.getLogger(__name__)
 
 
-class AravisCamera(BaseWebcam, ICameraExposureTime):
+class AravisCamera(BaseVideo, ICameraExposureTime):
     """A pyobs module for Aravis cameras."""
     __module__ = 'pyobs_aravis'
 
@@ -19,7 +19,7 @@ class AravisCamera(BaseWebcam, ICameraExposureTime):
         Args:
             device: Name of camera to connect to.
         """
-        BaseWebcam.__init__(self, *args, **kwargs)
+        BaseVideo.__init__(self, *args, **kwargs)
 
         # variables
         self._device_name = device
@@ -30,7 +30,7 @@ class AravisCamera(BaseWebcam, ICameraExposureTime):
 
     def open(self):
         """Open module."""
-        BaseWebcam.open(self)
+        BaseVideo.open(self)
 
         # list devices
         ids = aravis.get_device_ids()
@@ -39,7 +39,7 @@ class AravisCamera(BaseWebcam, ICameraExposureTime):
 
     def close(self):
         """Close the module."""
-        BaseWebcam.close(self)
+        BaseVideo.close(self)
 
         # stop camera
         self._camera.stop_acquisition()
