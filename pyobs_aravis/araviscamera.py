@@ -1,6 +1,5 @@
 import logging
 import time
-import aravis
 
 from pyobs.interfaces import ICameraExposureTime
 from pyobs.modules.camera import BaseVideo
@@ -13,7 +12,7 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
     """A pyobs module for Aravis cameras."""
     __module__ = 'pyobs_aravis'
 
-    def __init__(self, device: str, *args, **kwargs):
+    def __init__(self, device: str = None, *args, **kwargs):
         """Initializes a new AravisCamera.
 
         Args:
@@ -26,26 +25,34 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
         self._camera = None
 
         # thread
-        self.add_thread_func(self._capture)
+        if device is not None:
+            self.add_thread_func(self._capture)
+        else:
+            log.error('No device name given, not connecting to any camera.')
 
     def open(self):
         """Open module."""
         BaseVideo.open(self)
 
         # list devices
-        ids = aravis.get_device_ids()
-        if self._device_name not in ids:
-            raise ValueError('Could not find given device name in list of available cameras.')
+        if self._device_name is not None:
+            import aravis
+            ids = aravis.get_device_ids()
+            if self._device_name not in ids:
+                raise ValueError('Could not find given device name in list of available cameras.')
 
     def close(self):
         """Close the module."""
         BaseVideo.close(self)
 
         # stop camera
-        self._camera.stop_acquisition()
-        self._camera.shutdown()
+        if self._camera is not None:
+            self._camera.stop_acquisition()
+            self._camera.shutdown()
 
     def _capture(self):
+        import aravis
+
         # open camera
         self._camera = aravis.Camera(self._device_name)
 
