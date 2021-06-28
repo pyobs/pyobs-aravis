@@ -1,5 +1,6 @@
 import logging
 import time
+import aravis
 
 from pyobs.interfaces import ICameraExposureTime
 from pyobs.modules.camera import BaseVideo
@@ -32,14 +33,18 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
 
     def open(self):
         """Open module."""
-        BaseVideo.open(self)
-
         # list devices
         if self._device_name is not None:
             import aravis
             ids = aravis.get_device_ids()
             if self._device_name not in ids:
                 raise ValueError('Could not find given device name in list of available cameras.')
+
+        # open camera
+        self._camera = aravis.Camera(self._device_name)
+
+        # open base
+        BaseVideo.open(self)
 
     def close(self):
         """Close the module."""
@@ -51,11 +56,6 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
             self._camera.shutdown()
 
     def _capture(self):
-        import aravis
-
-        # open camera
-        self._camera = aravis.Camera(self._device_name)
-
         # start acquisition
         self._camera.start_acquisition_continuous(nb_buffers=2)
 
@@ -73,9 +73,6 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
 
             # process it
             self._set_image(frame)
-
-        # release camera
-        self._camera.stop_acquisition()
 
     def set_exposure_time(self, exposure_time: float, *args, **kwargs):
         """Set the exposure time in seconds.
