@@ -1,6 +1,6 @@
 import logging
 import time
-import aravis
+from . import aravis
 
 from pyobs.interfaces import ICameraExposureTime
 from pyobs.modules.camera import BaseVideo
@@ -35,7 +35,6 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
         """Open module."""
         # list devices
         if self._device_name is not None:
-            import aravis
             ids = aravis.get_device_ids()
             if self._device_name not in ids:
                 raise ValueError('Could not find given device name in list of available cameras.')
