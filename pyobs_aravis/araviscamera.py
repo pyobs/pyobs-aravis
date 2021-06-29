@@ -5,14 +5,14 @@ gi.require_version('Aravis', '0.8')
 from gi.repository import Aravis
 from . import aravis
 
-from pyobs.interfaces import ICameraExposureTime
+from pyobs.interfaces import IExposureTime
 from pyobs.modules.camera import BaseVideo
 
 
 log = logging.getLogger(__name__)
 
 
-class AravisCamera(BaseVideo, ICameraExposureTime):
+class AravisCamera(BaseVideo, IExposureTime):
     """A pyobs module for Aravis cameras."""
     __module__ = 'pyobs_aravis'
 
