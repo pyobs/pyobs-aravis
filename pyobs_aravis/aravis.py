@@ -1,13 +1,15 @@
 """
 High level pythonic interface to to the aravis library
 Taken from https://github.com/SintefManufacturing/python-aravis.
-Just in case the repo goes offline sometime...
+Just in case the repo goes offline sometime. Some changes were applied.
 """
 
 import time
 import logging
 import numpy as np
 import ctypes
+import gi
+gi.require_version('Aravis', '0.8')
 from gi.repository import Aravis
 
 __author__ = "Olivier Roulet-Dubonnet, Morten Lind"

@@ -1,5 +1,8 @@
 import logging
 import time
+import gi
+gi.require_version('Aravis', '0.8')
+from gi.repository import Aravis
 from . import aravis
 
 from pyobs.interfaces import ICameraExposureTime
@@ -13,7 +16,7 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
     """A pyobs module for Aravis cameras."""
     __module__ = 'pyobs_aravis'
 
-    def __init__(self, device: str = None, *args, **kwargs):
+    def __init__(self, device: str = None, settings: dict = None, *args, **kwargs):
         """Initializes a new AravisCamera.
 
         Args:
@@ -24,6 +27,7 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
         # variables
         self._device_name = device
         self._camera = None
+        self._settings = None if settings is None else settings
 
         # thread
         if device is not None:
@@ -42,6 +46,11 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
         # open camera
         self._camera = aravis.Camera(self._device_name)
 
+        # settings
+        for key, value in self._settings.items():
+            log.info(f'Setting value {key}={value}...')
+            self._camera.set_feature(key, value)
+
         # open base
         BaseVideo.open(self)
 
@@ -56,7 +65,7 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
 
     def _capture(self):
         # start acquisition
-        self._camera.start_acquisition_continuous(nb_buffers=2)
+        self._camera.start_acquisition_continuous(nb_buffers=5)
 
         # loop until closing
         last = time.time()
@@ -82,7 +91,7 @@ class AravisCamera(BaseVideo, ICameraExposureTime):
         Raises:
             ValueError: If exposure time could not be set.
         """
-        self._camera.set_exposure_time(int(exposure_time * 1e6))
+        self._camera.set_exposure_time(exposure_time * 1e6)
 
     def get_exposure_time(self, *args, **kwargs) -> float:
         """Returns the exposure time in seconds.
