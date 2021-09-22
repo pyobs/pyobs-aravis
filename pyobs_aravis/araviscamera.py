@@ -27,7 +27,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         # variables
         self._device_name = device
         self._camera = None
-        self._settings = None if settings is None else settings
+        self._settings = {} if settings is None else settings
 
         # thread
         if device is not None:
