@@ -1,8 +1,5 @@
 import logging
 import time
-import gi
-gi.require_version('Aravis', '0.8')
-from gi.repository import Aravis
 from . import aravis
 
 from pyobs.interfaces import IExposureTime
