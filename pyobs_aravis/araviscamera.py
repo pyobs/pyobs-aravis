@@ -13,7 +13,7 @@ class AravisCamera(BaseVideo, IExposureTime):
     """A pyobs module for Aravis cameras."""
     __module__ = 'pyobs_aravis'
 
-    def __init__(self, device: str = None, settings: dict = None, *args, **kwargs):
+    def __init__(self, device: str, settings: dict = None, *args, **kwargs):
         """Initializes a new AravisCamera.
 
         Args:
@@ -35,13 +35,14 @@ class AravisCamera(BaseVideo, IExposureTime):
     def open(self):
         """Open module."""
         # list devices
-        if self._device_name is not None:
-            ids = aravis.get_device_ids()
-            if self._device_name not in ids:
-                raise ValueError('Could not find given device name in list of available cameras.')
+        ids = aravis.get_device_ids()
+        if self._device_name not in ids:
+            raise ValueError('Could not find given device name in list of available cameras.')
 
         # open camera
+        log.info('Connecting to camera %s...', self._device_name)
         self._camera = aravis.Camera(self._device_name)
+        log.info('Connected.')
 
         # settings
         for key, value in self._settings.items():
