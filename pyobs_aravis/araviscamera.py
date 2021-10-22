@@ -1,5 +1,7 @@
 import logging
 import time
+from typing import Any, Dict, Optional, List
+
 from . import aravis
 
 from pyobs.interfaces import IExposureTime
@@ -13,18 +15,18 @@ class AravisCamera(BaseVideo, IExposureTime):
     """A pyobs module for Aravis cameras."""
     __module__ = 'pyobs_aravis'
 
-    def __init__(self, device: str, settings: dict = None, *args, **kwargs):
+    def __init__(self, device: str, settings: Optional[Dict[str, Any]] = None, **kwargs: Any):
         """Initializes a new AravisCamera.
 
         Args:
             device: Name of camera to connect to.
         """
-        BaseVideo.__init__(self, *args, **kwargs)
+        BaseVideo.__init__(self, **kwargs)
 
         # variables
         self._device_name = device
-        self._camera = None
-        self._settings = {} if settings is None else settings
+        self._camera: Optional[aravis.Camera] = None
+        self._settings: Dict[str, Any] = {} if settings is None else settings
 
         # thread
         if device is not None:
@@ -32,7 +34,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         else:
             log.error('No device name given, not connecting to any camera.')
 
-    def open(self):
+    def open(self) -> None:
         """Open module."""
         # list devices
         ids = aravis.get_device_ids()
@@ -52,7 +54,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         # open base
         BaseVideo.open(self)
 
-    def close(self):
+    def close(self) -> None:
         """Close the module."""
         BaseVideo.close(self)
 
@@ -61,7 +63,7 @@ class AravisCamera(BaseVideo, IExposureTime):
             self._camera.stop_acquisition()
             self._camera.shutdown()
 
-    def _capture(self):
+    def _capture(self) -> None:
         # start acquisition
         self._camera.start_acquisition_continuous(nb_buffers=5)
 
@@ -80,7 +82,7 @@ class AravisCamera(BaseVideo, IExposureTime):
             # process it
             self._set_image(frame)
 
-    def set_exposure_time(self, exposure_time: float, *args, **kwargs):
+    def set_exposure_time(self, exposure_time: float, **kwargs: Any) -> None:
         """Set the exposure time in seconds.
 
         Args:
@@ -91,7 +93,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         """
         self._camera.set_exposure_time(exposure_time * 1e6)
 
-    def get_exposure_time(self, *args, **kwargs) -> float:
+    def get_exposure_time(self, **kwargs: Any) -> float:
         """Returns the exposure time in seconds.
 
         Returns:
