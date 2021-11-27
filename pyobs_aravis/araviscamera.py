@@ -36,10 +36,24 @@ class AravisCamera(BaseVideo, IExposureTime):
 
     def open(self) -> None:
         """Open module."""
+        BaseVideo.open(self)
+
         # list devices
         ids = aravis.get_device_ids()
         if self._device_name not in ids:
             raise ValueError('Could not find given device name in list of available cameras.')
+
+        # open camera
+        self._open_camera()
+
+    def close(self) -> None:
+        """Close the module."""
+        BaseVideo.close(self)
+        self._close_camera()
+
+    def _open_camera(self):
+        # is open?
+        self._close_camera()
 
         # open camera
         log.info('Connecting to camera %s...', self._device_name)
@@ -51,17 +65,12 @@ class AravisCamera(BaseVideo, IExposureTime):
             log.info(f'Setting value {key}={value}...')
             self._camera.set_feature(key, value)
 
-        # open base
-        BaseVideo.open(self)
-
-    def close(self) -> None:
-        """Close the module."""
-        BaseVideo.close(self)
-
+    def _close_camera(self):
         # stop camera
         if self._camera is not None:
             self._camera.stop_acquisition()
             self._camera.shutdown()
+        self._camera = None
 
     def _capture(self) -> None:
         # start acquisition
