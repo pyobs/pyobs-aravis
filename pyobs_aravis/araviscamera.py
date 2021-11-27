@@ -68,6 +68,7 @@ class AravisCamera(BaseVideo, IExposureTime):
     def _close_camera(self):
         # stop camera
         if self._camera is not None:
+            log.info('Closing camera...')
             self._camera.stop_acquisition()
             self._camera.shutdown()
         self._camera = None
