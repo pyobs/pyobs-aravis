@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "pyobs-aravis"
+version = "0.14.1"
+description = "pyobs module for Aravis cameras"
+authors = ["Tim-Oliver Husser <thusser@uni-goettingen.de>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = ">=3.7,<3.11"
+numpy = "^1.21"
+PyGObject = "^3.42"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

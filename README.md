@@ -24,4 +24,5 @@ Dependencies
 * **pyobs** for the core funcionality. It is not included in the *requirements.txt*, so needs to be installed 
   separately.
 * [Aravis](https://github.com/AravisProject/aravis) for accessing the camera.
+* [python-aravis](https://github.com/SintefManufacturing/python-aravis) as an easy-to-use interface.
 
