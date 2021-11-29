@@ -46,50 +46,48 @@ class AravisCamera(BaseVideo, IExposureTime):
             raise ValueError('Could not find given device name in list of available cameras.')
 
         # open camera
-        self._open_camera()
+        self.activate_camera()
 
     def close(self) -> None:
         """Close the module."""
         BaseVideo.close(self)
-        self._close_camera()
+        with self._camera_lock:
+            self._close_camera()
 
     def _open_camera(self) -> None:
         """Open camera."""
 
-        with self._camera_lock:
-            # is open?
-            self._close_camera()
+        # open camera
+        log.info('Connecting to camera %s...', self._device_name)
+        self._camera = aravis.Camera(self._device_name)
+        log.info('Connected.')
 
-            # open camera
-            log.info('Connecting to camera %s...', self._device_name)
-            self._camera = aravis.Camera(self._device_name)
-            log.info('Connected.')
+        # settings
+        for key, value in self._settings.items():
+            log.info(f'Setting value {key}={value}...')
+            self._camera.set_feature(key, value)
 
-            # settings
-            for key, value in self._settings.items():
-                log.info(f'Setting value {key}={value}...')
-                self._camera.set_feature(key, value)
-
-            # start acquisition
-            self._camera.start_acquisition_continuous(nb_buffers=5)
+        # start acquisition
+        self._camera.start_acquisition_continuous(nb_buffers=5)
 
     def _close_camera(self) -> None:
         """Close camera."""
         # stop camera
-        with self._camera_lock:
-            if self._camera is not None:
-                log.info('Closing camera...')
-                self._camera.stop_acquisition()
-                self._camera.shutdown()
-            self._camera = None
+        if self._camera is not None:
+            log.info('Closing camera...')
+            self._camera.stop_acquisition()
+            self._camera.shutdown()
+        self._camera = None
 
     def _activate_camera(self) -> None:
         """Can be overridden by derived class to implement inactivity sleep"""
-        self._open_camera()
+        with self._camera_lock:
+            self._open_camera()
 
     def _deactivate_camera(self) -> None:
         """Can be overridden by derived class to implement inactivity sleep"""
-        self._close_camera()
+        with self._camera_lock:
+            self._close_camera()
 
     def _capture(self) -> None:
         """Take new images in loop."""
@@ -124,6 +122,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         Raises:
             ValueError: If exposure time could not be set.
         """
+        self.activate_camera()
         self._camera.set_exposure_time(exposure_time * 1e6)
 
     def get_exposure_time(self, **kwargs: Any) -> float:
@@ -132,6 +131,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         Returns:
             Exposure time in seconds.
         """
+        self.activate_camera()
         return self._camera.get_exposure_time() / 1e6
 
 
