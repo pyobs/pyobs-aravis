@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import threading
 import time
@@ -94,16 +95,16 @@ class AravisCamera(BaseVideo, IExposureTime):
 
         # loop until closing
         last = time.time()
-        while not self.closing.is_set():
+        while True:
             # no camera or not active?
             if self._camera is None or not self.camera_active:
                 # wait a little
-                self.closing.wait(0.1)
+                await asyncio.sleep(0.1)
                 continue
 
             # if time since last image is too short, wait a little
             if time.time() - last < self._interval:
-                self.closing.wait(0.01)
+                await asyncio.sleep(0.01)
                 continue
 
             # read frame

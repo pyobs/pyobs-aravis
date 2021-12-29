@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "pyobs-aravis"
-version = "0.14.1"
+version = "0.15.0"
 description = "pyobs module for Aravis cameras"
 authors = ["Tim-Oliver Husser <thusser@uni-goettingen.de>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = ">=3.7,<3.11"
+python = ">=3.9,<3.11"
 numpy = "^1.21"
 PyGObject = "^3.42"
 
