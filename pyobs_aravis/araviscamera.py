@@ -1,8 +1,7 @@
 import asyncio
 import logging
-import threading
 import time
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional
 
 from . import aravis
 
@@ -29,17 +28,17 @@ class AravisCamera(BaseVideo, IExposureTime):
         self._device_name = device
         self._camera: Optional[aravis.Camera] = None
         self._settings: Dict[str, Any] = {} if settings is None else settings
-        self._camera_lock = threading.Lock()
+        self._camera_lock = asyncio.Lock()
 
         # thread
         if device is not None:
-            self.add_thread_func(self._capture)
+            self.add_background_task(self._capture)
         else:
             log.error('No device name given, not connecting to any camera.')
 
-    def open(self) -> None:
+    async def open(self) -> None:
         """Open module."""
-        BaseVideo.open(self)
+        await BaseVideo.open(self)
 
         # list devices
         ids = aravis.get_device_ids()
@@ -47,12 +46,12 @@ class AravisCamera(BaseVideo, IExposureTime):
             raise ValueError('Could not find given device name in list of available cameras.')
 
         # open camera
-        self.activate_camera()
+        await self.activate_camera()
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Close the module."""
-        BaseVideo.close(self)
-        with self._camera_lock:
+        await BaseVideo.close(self)
+        async with self._camera_lock:
             self._close_camera()
 
     def _open_camera(self) -> None:
@@ -80,17 +79,17 @@ class AravisCamera(BaseVideo, IExposureTime):
             self._camera.shutdown()
         self._camera = None
 
-    def _activate_camera(self) -> None:
+    async def _activate_camera(self) -> None:
         """Can be overridden by derived class to implement inactivity sleep"""
-        with self._camera_lock:
+        async with self._camera_lock:
             self._open_camera()
 
-    def _deactivate_camera(self) -> None:
+    async def _deactivate_camera(self) -> None:
         """Can be overridden by derived class to implement inactivity sleep"""
-        with self._camera_lock:
+        async with self._camera_lock:
             self._close_camera()
 
-    def _capture(self) -> None:
+    async def _capture(self) -> None:
         """Take new images in loop."""
 
         # loop until closing
@@ -112,9 +111,9 @@ class AravisCamera(BaseVideo, IExposureTime):
             last = time.time()
 
             # process it
-            self._set_image(frame)
+            await self._set_image(frame)
 
-    def set_exposure_time(self, exposure_time: float, **kwargs: Any) -> None:
+    async def set_exposure_time(self, exposure_time: float, **kwargs: Any) -> None:
         """Set the exposure time in seconds.
 
         Args:
@@ -123,16 +122,16 @@ class AravisCamera(BaseVideo, IExposureTime):
         Raises:
             ValueError: If exposure time could not be set.
         """
-        self.activate_camera()
+        await self.activate_camera()
         self._camera.set_exposure_time(exposure_time * 1e6)
 
-    def get_exposure_time(self, **kwargs: Any) -> float:
+    async def get_exposure_time(self, **kwargs: Any) -> float:
         """Returns the exposure time in seconds.
 
         Returns:
             Exposure time in seconds.
         """
-        self.activate_camera()
+        await self.activate_camera()
         return self._camera.get_exposure_time() / 1e6
 
 
