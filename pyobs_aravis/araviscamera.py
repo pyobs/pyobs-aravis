@@ -14,9 +14,12 @@ log = logging.getLogger(__name__)
 
 class AravisCamera(BaseVideo, IExposureTime):
     """A pyobs module for Aravis cameras."""
-    __module__ = 'pyobs_aravis'
 
-    def __init__(self, device: str, settings: Optional[Dict[str, Any]] = None, **kwargs: Any):
+    __module__ = "pyobs_aravis"
+
+    def __init__(
+        self, device: str, settings: Optional[Dict[str, Any]] = None, **kwargs: Any
+    ):
         """Initializes a new AravisCamera.
 
         Args:
@@ -34,7 +37,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         if device is not None:
             self.add_background_task(self._capture)
         else:
-            log.error('No device name given, not connecting to any camera.')
+            log.error("No device name given, not connecting to any camera.")
 
     async def open(self) -> None:
         """Open module."""
@@ -43,7 +46,9 @@ class AravisCamera(BaseVideo, IExposureTime):
         # list devices
         ids = aravis.get_device_ids()
         if self._device_name not in ids:
-            raise ValueError('Could not find given device name in list of available cameras.')
+            raise ValueError(
+                "Could not find given device name in list of available cameras."
+            )
 
         # open camera
         await self.activate_camera()
@@ -58,13 +63,13 @@ class AravisCamera(BaseVideo, IExposureTime):
         """Open camera."""
 
         # open camera
-        log.info('Connecting to camera %s...', self._device_name)
+        log.info("Connecting to camera %s...", self._device_name)
         self._camera = aravis.Camera(self._device_name)
-        log.info('Connected.')
+        log.info("Connected.")
 
         # settings
         for key, value in self._settings.items():
-            log.info(f'Setting value {key}={value}...')
+            log.info(f"Setting value {key}={value}...")
             self._camera.set_feature(key, value)
 
         # start acquisition
@@ -74,7 +79,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         """Close camera."""
         # stop camera
         if self._camera is not None:
-            log.info('Closing camera...')
+            log.info("Closing camera...")
             self._camera.stop_acquisition()
             self._camera.shutdown()
         self._camera = None
@@ -135,4 +140,4 @@ class AravisCamera(BaseVideo, IExposureTime):
         return self._camera.get_exposure_time() / 1e6
 
 
-__all__ = ['AravisCamera']
+__all__ = ["AravisCamera"]
