@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import time
-from typing import Any, Dict, Optional
+import numpy.typing as npt
+from typing import Any, Dict, Optional, List
 
 from . import aravis
 
@@ -18,7 +19,11 @@ class AravisCamera(BaseVideo, IExposureTime):
     __module__ = "pyobs_aravis"
 
     def __init__(
-        self, device: str, settings: Optional[Dict[str, Any]] = None, **kwargs: Any
+        self,
+        device: str,
+        settings: Optional[Dict[str, Any]] = None,
+        buffers: int = 5,
+        **kwargs: Any,
     ):
         """Initializes a new AravisCamera.
 
@@ -32,6 +37,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         self._camera: Optional[aravis.Camera] = None
         self._settings: Dict[str, Any] = {} if settings is None else settings
         self._camera_lock = asyncio.Lock()
+        self._buffers = buffers
 
         # thread
         if device is not None:
@@ -44,7 +50,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         await BaseVideo.open(self)
 
         # list devices
-        ids = aravis.get_device_ids()
+        ids: List[str] = aravis.get_device_ids()  # type: ignore
         if self._device_name not in ids:
             raise ValueError(
                 "Could not find given device name in list of available cameras."
@@ -64,24 +70,24 @@ class AravisCamera(BaseVideo, IExposureTime):
 
         # open camera
         log.info("Connecting to camera %s...", self._device_name)
-        self._camera = aravis.Camera(self._device_name)
+        self._camera = aravis.Camera(self._device_name)  # type: ignore
         log.info("Connected.")
 
         # settings
         for key, value in self._settings.items():
             log.info(f"Setting value {key}={value}...")
-            self._camera.set_feature(key, value)
+            self._camera.set_feature(key, value)  # type: ignore
 
         # start acquisition
-        self._camera.start_acquisition_continuous(nb_buffers=5)
+        self._camera.start_acquisition_continuous(nb_buffers=self._buffers)  # type: ignore
 
     def _close_camera(self) -> None:
         """Close camera."""
         # stop camera
         if self._camera is not None:
             log.info("Closing camera...")
-            self._camera.stop_acquisition()
-            self._camera.shutdown()
+            self._camera.stop_acquisition()  # type: ignore
+            self._camera.shutdown()  # type: ignore
         self._camera = None
 
     async def _activate_camera(self) -> None:
@@ -112,7 +118,7 @@ class AravisCamera(BaseVideo, IExposureTime):
                 continue
 
             # read frame
-            frame = self._camera.pop_frame()
+            frame: npt.NDArray[float] = self._camera.pop_frame()  # type: ignore
             last = time.time()
 
             # process it
@@ -128,7 +134,7 @@ class AravisCamera(BaseVideo, IExposureTime):
             ValueError: If exposure time could not be set.
         """
         await self.activate_camera()
-        self._camera.set_exposure_time(exposure_time * 1e6)
+        self._camera.set_exposure_time(exposure_time * 1e6)  # type: ignore
 
     async def get_exposure_time(self, **kwargs: Any) -> float:
         """Returns the exposure time in seconds.
@@ -137,7 +143,10 @@ class AravisCamera(BaseVideo, IExposureTime):
             Exposure time in seconds.
         """
         await self.activate_camera()
-        return self._camera.get_exposure_time() / 1e6
+        return self._camera.get_exposure_time() / 1e6  # type: ignore
+
+    async def get_exposure_time_left(self, **kwargs: Any) -> float:
+        return 0.0
 
 
 __all__ = ["AravisCamera"]
