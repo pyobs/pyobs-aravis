@@ -112,13 +112,20 @@ class AravisCamera(BaseVideo, IExposureTime):
                 await asyncio.sleep(0.1)
                 continue
 
+            # read frame
+            while True:
+                frame: npt.NDArray[float] = self._camera.pop_frame()  # type: ignore
+                if frame is None:
+                    await asyncio.sleep(0.01)
+                else:
+                    break
+
             # if time since last image is too short, wait a little
             if time.time() - last < self._interval:
                 await asyncio.sleep(0.01)
                 continue
 
-            # read frame
-            frame: npt.NDArray[float] = self._camera.pop_frame()  # type: ignore
+            # save time
             last = time.time()
 
             # process it
