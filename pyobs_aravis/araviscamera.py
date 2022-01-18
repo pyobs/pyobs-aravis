@@ -4,8 +4,6 @@ import time
 import numpy.typing as npt
 from typing import Any, Dict, Optional, List
 
-from . import aravis
-
 from pyobs.interfaces import IExposureTime
 from pyobs.modules.camera import BaseVideo
 
@@ -31,6 +29,7 @@ class AravisCamera(BaseVideo, IExposureTime):
             device: Name of camera to connect to.
         """
         BaseVideo.__init__(self, **kwargs)
+        from . import aravis
 
         # variables
         self._device_name = device
@@ -47,6 +46,9 @@ class AravisCamera(BaseVideo, IExposureTime):
 
     async def open(self) -> None:
         """Open module."""
+        from . import aravis
+
+        # open base
         await BaseVideo.open(self)
 
         # list devices
@@ -67,6 +69,7 @@ class AravisCamera(BaseVideo, IExposureTime):
 
     def _open_camera(self) -> None:
         """Open camera."""
+        from . import aravis
 
         # open camera
         log.info("Connecting to camera %s...", self._device_name)
