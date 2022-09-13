@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyobs-aravis"
-version = "0.15.3"
+version = "1.0.0"
 description = "pyobs module for Aravis cameras"
 authors = ["Tim-Oliver Husser <thusser@uni-goettingen.de>"]
 license = "MIT"
@@ -9,13 +9,13 @@ license = "MIT"
 python = ">=3.9,<3.11"
 numpy = "^1.21"
 PyGObject = "^3.42"
-pyobs-core = "^0.16.1"
+pyobs-core = "^1.0"
 
 [tool.poetry.dev-dependencies]
 black = "^21.12b0"
-pre-commit = "^2.16.0"
-Sphinx = "^4.4.0"
-sphinx-rtd-theme = "^1.0.0"
+pre-commit = "^2.16"
+Sphinx = "^4.4"
+sphinx-rtd-theme = "^1.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
