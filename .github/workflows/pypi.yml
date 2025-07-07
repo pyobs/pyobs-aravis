@@ -22,5 +22,5 @@ jobs:
 
       - name: Publish
         env:
-          PYPI_TOKEN: ${{ secrets.pypi_password }}
+          PYPI_TOKEN: ${{ secrets.pypi_token }}
         run: uv publish --token $PYPI_TOKEN
