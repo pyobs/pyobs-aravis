@@ -1,6 +1,6 @@
 [project]
 name = "pyobs-aravis"
-version = "1.0.0"
+version = "1.1.0"
 description = "pyobs module for Aravis cameras"
 authors = [{ name = "Tim-Oliver Husser", email = "thusser@uni-goettingen.de" }]
 requires-python = ">=3.11"
