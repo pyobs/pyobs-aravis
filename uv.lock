@@ -749,7 +749,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/4a/36/fec530a313d3d48f1
 
 [[package]]
 name = "pyobs-aravis"
-version = "1.1.1"
+version = "1.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
