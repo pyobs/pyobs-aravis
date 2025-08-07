@@ -54,9 +54,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         # list devices
         ids: List[str] = aravis.get_device_ids()  # type: ignore
         if self._device_name not in ids:
-            raise ValueError(
-                "Could not find given device name in list of available cameras."
-            )
+            raise ValueError("Could not find given device name in list of available cameras.")
 
         # open camera
         await self.activate_camera()
@@ -109,30 +107,35 @@ class AravisCamera(BaseVideo, IExposureTime):
         # loop until closing
         last = time.time()
         while True:
-            # no camera or not active?
-            if self._camera is None or not self.camera_active:
-                # wait a little
-                await asyncio.sleep(0.1)
-                continue
+            try:
+                # no camera or not active?
+                if self._camera is None or not self.camera_active:
+                    # wait a little
+                    await asyncio.sleep(0.1)
+                    continue
 
-            # read frame
-            while True:
-                frame: npt.NDArray[float] = self._camera.pop_frame()  # type: ignore
-                if frame is None:
+                # read frame
+                while True:
+                    frame: npt.NDArray[float] = self._camera.pop_frame()  # type: ignore
+                    if frame is None:
+                        await asyncio.sleep(0.01)
+                    else:
+                        break
+
+                # if time since last image is too short, wait a little
+                if time.time() - last < self._interval:
                     await asyncio.sleep(0.01)
-                else:
-                    break
+                    continue
 
-            # if time since last image is too short, wait a little
-            if time.time() - last < self._interval:
-                await asyncio.sleep(0.01)
-                continue
+                # save time
+                last = time.time()
 
-            # save time
-            last = time.time()
+                # process it
+                await self._set_image(frame)
 
-            # process it
-            await self._set_image(frame)
+            except:
+                # whatever happened here, we don't want the method to die
+                await asyncio.sleep(1)
 
     async def set_exposure_time(self, exposure_time: float, **kwargs: Any) -> None:
         """Set the exposure time in seconds.
