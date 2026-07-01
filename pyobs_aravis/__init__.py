@@ -1,4 +1,3 @@
-from .araviscamera import AravisCamera
-
+from .araviscamera import AravisCamera as AravisCamera
 
 __all__ = ["AravisCamera"]

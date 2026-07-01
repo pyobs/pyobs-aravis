@@ -37,3 +37,4 @@ exclude = ["pyobs_aravis/aravis.py"]
 
 [tool.pyrefly]
 python-version = "3.11"
+project-excludes = ["pyobs_aravis/aravis.py"]
