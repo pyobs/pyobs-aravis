@@ -42,6 +42,17 @@ Alternatively, with plain `venv`/`pip`:
     pip install .
 
 
+GUI
+---
+For testing a camera without a full *pyobs* setup, install the optional `gui` extra:
+
+    uv sync --system-site-packages --extra gui
+
+and run:
+
+    uv run aravis-gui
+
+
 Dependencies
 ------------
 * [pyobs-core](https://github.com/pyobs/pyobs-core) for the core functionality.
