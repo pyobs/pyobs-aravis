@@ -7,7 +7,6 @@ requires-python = ">=3.11,<3.14"
 license = "MIT"
 dependencies = [
     "numpy>=2.2.5,<3",
-    "PyGObject>=3.42",
     "pyobs-core>=2.0.0.dev1,<3",
 ]
 
