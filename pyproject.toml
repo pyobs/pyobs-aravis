@@ -10,6 +10,15 @@ dependencies = [
     "pyobs-core>=2.0.0.dev1,<3",
 ]
 
+[project.optional-dependencies]
+gui = [
+    "pyobs-core[gui]>=2.0.0.dev1,<3",
+    "qasync>=0.28.0",
+]
+
+[project.scripts]
+aravis-gui = 'pyobs_aravis.gui:main'
+
 [dependency-groups]
 dev = [
     "black>=25.1.0,<26",
