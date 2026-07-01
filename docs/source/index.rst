@@ -10,7 +10,7 @@ Example configuration
 
 This is an example configuration, tested on a TIS 23GP031::
 
-    class: pyobs_iagvt.fibercamera.FiberCamera
+    class: pyobs_aravis.AravisCamera
     device: The Imaging Source Europe GmbH-DMK 23GP031-00000000
     centre: [947.0, 839.0]
     rotation: -97.07
