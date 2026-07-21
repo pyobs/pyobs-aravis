@@ -37,6 +37,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         self._settings: dict[str, Any] = {} if settings is None else settings
         self._camera_lock = asyncio.Lock()
         self._buffers = buffers
+        self._exposure_time: float = 0.0
 
         if device is not None:
             self.add_background_task(self._capture)
@@ -125,6 +126,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         """
         await self.activate_camera()
         self._camera.set_exposure_time(exposure_time * 1e6)  # type: ignore[union-attr]
+        self._exposure_time = exposure_time
         await self.comm.set_state(IExposureTime, ExposureTimeState(exposure_time=exposure_time))
 
 
