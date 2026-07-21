@@ -16,6 +16,11 @@ log = logging.getLogger(__name__)
 # rather than let a single dead camera freeze the whole module.
 _SDK_CALL_TIMEOUT = 5.0
 
+# pop_frame() is polled from _capture() and is expected to legitimately take a while (up to the
+# camera's own frame interval/exposure time), unlike the other SDK calls above -- a much more
+# generous timeout than _SDK_CALL_TIMEOUT, so normal operation never trips it.
+_FRAME_WAIT_TIMEOUT = 30.0
+
 
 class AravisCamera(BaseVideo, IExposureTime):
     """A pyobs module for Aravis cameras."""
@@ -153,10 +158,10 @@ class AravisCamera(BaseVideo, IExposureTime):
                     await asyncio.sleep(0.1)
                     continue
 
-                frame: npt.NDArray[Any] = self._camera.pop_frame()  # type: ignore[union-attr]
-                while frame is None:
-                    await asyncio.sleep(0.01)
-                    frame = self._camera.pop_frame()  # type: ignore[union-attr]
+                frame = await self._wait_for_frame()
+                if frame is None:
+                    # camera went away, or the wait timed out -- back off and retry
+                    continue
 
                 if time.time() - last < self._interval:
                     await asyncio.sleep(0.01)
@@ -167,6 +172,38 @@ class AravisCamera(BaseVideo, IExposureTime):
 
             except Exception:
                 await asyncio.sleep(1)
+
+    async def _wait_for_frame(self, timeout: float = _FRAME_WAIT_TIMEOUT) -> npt.NDArray[Any] | None:
+        """Waits for the next frame without blocking the event loop.
+
+        Polls pop_frame() from a background thread (see _run_blocking) rather than polling it
+        directly from the async loop with a sleep in between each attempt -- pop_frame() is
+        assumed non-blocking in the common case, but if the underlying aravis/GLib call ever
+        doesn't honor that (camera hiccup, network stall for GigE Vision), polling it directly
+        would freeze the whole module for as long as that lasts, repeatedly, for the module's
+        entire runtime. Runs the whole "poll until ready" loop as a single blocking call instead,
+        so only one thread gets spawned per delivered frame rather than one per 10ms poll.
+
+        Returns:
+            The next frame, or None if the camera disappeared mid-wait or the wait timed out.
+        """
+        result: list[npt.NDArray[Any]] = []
+
+        def _poll() -> None:
+            camera = self._camera
+            while camera is not None:
+                frame = camera.pop_frame()  # type: ignore[union-attr]
+                # pop_frame() can return a non-None array that's empty along axis 0 instead of
+                # None -- treat that the same as "not ready yet" rather than a real frame
+                if frame is not None and frame.size != 0:  # type: ignore[union-attr]
+                    result.append(frame)  # type: ignore[arg-type]
+                    return
+                time.sleep(0.01)
+
+        if not await self._run_blocking(_poll, timeout=timeout):
+            log.error("Timed out waiting for a frame after %.1fs.", timeout)
+            return None
+        return result[0] if result else None
 
     async def set_exposure_time(self, exposure_time: float, **kwargs: Any) -> None:
         """Set the exposure time in seconds.
