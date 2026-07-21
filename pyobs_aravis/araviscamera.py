@@ -79,6 +79,10 @@ class AravisCamera(BaseVideo, IExposureTime):
 
         await self.activate_camera()
 
+        # publish initial exposure-time state -- otherwise a caller doing wait_for_state()
+        # before the first set_exposure_time() call would time out with nothing ever published
+        await self.comm.set_state(IExposureTime, ExposureTimeState(exposure_time=self._exposure_time))
+
     async def close(self) -> None:
         """Close the module."""
         await BaseVideo.close(self)
