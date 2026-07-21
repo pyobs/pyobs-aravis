@@ -32,7 +32,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         BaseVideo.__init__(self, **kwargs)
         from . import aravis
 
-        self._device_name = device
+        self._camera_device_name = device
         self._camera: aravis.Camera | None = None
         self._settings: dict[str, Any] = {} if settings is None else settings
         self._camera_lock = asyncio.Lock()
@@ -51,7 +51,7 @@ class AravisCamera(BaseVideo, IExposureTime):
         await BaseVideo.open(self)
 
         ids: list[str] = aravis.get_device_ids()  # type: ignore[assignment]
-        if self._device_name not in ids:
+        if self._camera_device_name not in ids:
             raise ValueError("Could not find given device name in list of available cameras.")
 
         await self.activate_camera()
@@ -66,8 +66,8 @@ class AravisCamera(BaseVideo, IExposureTime):
         """Open camera."""
         from . import aravis
 
-        log.info("Connecting to camera %s...", self._device_name)
-        self._camera = aravis.Camera(self._device_name)  # type: ignore[assignment]
+        log.info("Connecting to camera %s...", self._camera_device_name)
+        self._camera = aravis.Camera(self._camera_device_name)  # type: ignore[assignment]
         log.info("Connected.")
 
         for key, value in self._settings.items():
@@ -80,8 +80,11 @@ class AravisCamera(BaseVideo, IExposureTime):
         """Close camera."""
         if self._camera is not None:
             log.info("Closing camera...")
-            self._camera.stop_acquisition()  # type: ignore[union-attr]
-            self._camera.shutdown()  # type: ignore[union-attr]
+            try:
+                self._camera.stop_acquisition()  # type: ignore[union-attr]
+                self._camera.shutdown()  # type: ignore[union-attr]
+            except Exception:
+                log.exception("Error closing camera.")
         self._camera = None
 
     async def _activate_camera(self) -> None:
