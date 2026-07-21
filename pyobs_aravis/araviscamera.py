@@ -80,8 +80,11 @@ class AravisCamera(BaseVideo, IExposureTime):
         """Close camera."""
         if self._camera is not None:
             log.info("Closing camera...")
-            self._camera.stop_acquisition()  # type: ignore[union-attr]
-            self._camera.shutdown()  # type: ignore[union-attr]
+            try:
+                self._camera.stop_acquisition()  # type: ignore[union-attr]
+                self._camera.shutdown()  # type: ignore[union-attr]
+            except Exception:
+                log.exception("Error closing camera.")
         self._camera = None
 
     async def _activate_camera(self) -> None:
