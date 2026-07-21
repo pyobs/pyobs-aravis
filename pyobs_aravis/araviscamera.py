@@ -57,7 +57,18 @@ class AravisCamera(BaseVideo, IExposureTime):
 
         await BaseVideo.open(self)
 
-        ids: list[str] = aravis.get_device_ids()  # type: ignore[assignment]
+        # device discovery is a blocking, network-based scan (GigE Vision/USB3 Vision devices
+        # reply to a broadcast query) that can take multiple seconds -- run it like the other
+        # aravis/GLib calls (see _run_blocking) instead of freezing the whole module's event
+        # loop, and with it, the ability to respond to any other module, for that long
+        ids: list[str] = []
+
+        def _list_device_ids() -> None:
+            ids.extend(aravis.get_device_ids())  # type: ignore[arg-type]
+
+        if not await self._run_blocking(_list_device_ids):
+            raise TimeoutError(f"Timed out listing available cameras after {_SDK_CALL_TIMEOUT}s.")
+
         if self._camera_device_name not in ids:
             raise ValueError("Could not find given device name in list of available cameras.")
 
