@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 import numpy.typing as npt
@@ -8,6 +10,11 @@ from pyobs.interfaces import ExposureTimeState, IExposureTime
 from pyobs.modules.camera import BaseVideo
 
 log = logging.getLogger(__name__)
+
+# aravis/GLib calls are blocking and are made directly on the event loop thread (see _run_blocking).
+# If the camera has gone unresponsive, they can hang indefinitely, so we bound them with a timeout
+# rather than let a single dead camera freeze the whole module.
+_SDK_CALL_TIMEOUT = 5.0
 
 
 class AravisCamera(BaseVideo, IExposureTime):
@@ -59,8 +66,7 @@ class AravisCamera(BaseVideo, IExposureTime):
     async def close(self) -> None:
         """Close the module."""
         await BaseVideo.close(self)
-        async with self._camera_lock:
-            self._close_camera()
+        await self._deactivate_camera()
 
     def _open_camera(self) -> None:
         """Open camera."""
@@ -87,15 +93,45 @@ class AravisCamera(BaseVideo, IExposureTime):
                 log.exception("Error closing camera.")
         self._camera = None
 
+    @staticmethod
+    async def _run_blocking(func: Callable[[], None], timeout: float = _SDK_CALL_TIMEOUT) -> bool:
+        """Run a blocking aravis/GLib call in a daemon thread, so a hung call can't freeze the module.
+
+        A plain executor isn't used here, since its worker threads are non-daemon and Python joins
+        them on interpreter shutdown -- a hung call would then just move the freeze to process exit.
+
+        Returns:
+            True if func completed within timeout, False if it's still running in the background.
+        """
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[None] = loop.create_future()
+
+        def _wrapper() -> None:
+            try:
+                func()
+            finally:
+                loop.call_soon_threadsafe(future.set_result, None)
+
+        threading.Thread(target=_wrapper, daemon=True).start()
+        try:
+            await asyncio.wait_for(future, timeout=timeout)
+            return True
+        except TimeoutError:
+            return False
+
     async def _activate_camera(self) -> None:
         """Open camera on activation."""
         async with self._camera_lock:
-            self._open_camera()
+            if not await self._run_blocking(self._open_camera):
+                log.error("Timed out connecting to camera after %.1fs.", _SDK_CALL_TIMEOUT)
+                self._camera = None
 
     async def _deactivate_camera(self) -> None:
         """Close camera on deactivation."""
         async with self._camera_lock:
-            self._close_camera()
+            if not await self._run_blocking(self._close_camera):
+                log.error("Timed out closing camera after %.1fs, abandoning cleanup.", _SDK_CALL_TIMEOUT)
+                self._camera = None
 
     async def _capture(self) -> None:
         """Take new images in loop."""
