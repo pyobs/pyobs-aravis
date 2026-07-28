@@ -7,12 +7,12 @@ requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
     "numpy>=2.2.5,<3",
-    "pyobs-core>=2.0.0.dev1,<3",
+    "pyobs-core>=2.0.0.dev48,<3",
 ]
 
 [project.optional-dependencies]
 gui = [
-    "pyobs-core[gui]>=2.0.0.dev1,<3",
+    "pyobs-core[gui]>=2.0.0.dev48,<3",
     "qasync>=0.28.0",
 ]
 

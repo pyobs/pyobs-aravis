@@ -2219,8 +2219,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.2.5,<3" },
-    { name = "pyobs-core", specifier = ">=2.0.0.dev1,<3" },
-    { name = "pyobs-core", extras = ["gui"], marker = "extra == 'gui'", specifier = ">=2.0.0.dev1,<3" },
+    { name = "pyobs-core", specifier = ">=2.0.0.dev48,<3" },
+    { name = "pyobs-core", extras = ["gui"], marker = "extra == 'gui'", specifier = ">=2.0.0.dev48,<3" },
     { name = "qasync", marker = "extra == 'gui'", specifier = ">=0.28.0" },
 ]
 provides-extras = ["gui"]
