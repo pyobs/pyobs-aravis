@@ -47,7 +47,7 @@ exclude = ["pyobs_aravis/aravis.py"]
 
 [tool.pyrefly]
 python-version = "3.11"
-project-excludes = ["pyobs_aravis/aravis.py"]
+project-excludes = ["pyobs_aravis/aravis.py", "pyobs_aravis/gui.py"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
