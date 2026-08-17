@@ -31,3 +31,12 @@ async def test_run_blocking_times_out() -> None:
     assert await AravisCamera._run_blocking(slow, timeout=0.01) is False
     done.set()
     await asyncio.sleep(0.05)
+
+
+@pytest.mark.asyncio
+async def test_run_blocking_reraises_func_exception() -> None:
+    def failing() -> None:
+        raise ValueError("camera not found")
+
+    with pytest.raises(ValueError, match="camera not found"):
+        await AravisCamera._run_blocking(failing)
