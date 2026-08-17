@@ -1,18 +1,18 @@
 [project]
 name = "pyobs-aravis"
-version = "2.0.0.dev11"
+version = "2.0.0.dev12"
 description = "pyobs module for Aravis cameras"
 authors = [{ name = "Tim-Oliver Husser", email = "thusser@uni-goettingen.de" }]
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
     "numpy>=2.2.5,<3",
-    "pyobs-core>=2.0.0.dev1,<3",
+    "pyobs-core>=2.0.0.dev48,<3",
 ]
 
 [project.optional-dependencies]
 gui = [
-    "pyobs-core[gui]>=2.0.0.dev1,<3",
+    "pyobs-core[gui]>=2.0.0.dev48,<3",
     "qasync>=0.28.0",
 ]
 
@@ -21,10 +21,12 @@ aravis-gui = 'pyobs_aravis.gui:main'
 
 [dependency-groups]
 dev = [
-    "black>=25.1.0,<26",
+    "black>=25.1.0,<27",
     "ruff>=0.9.0",
     "pyrefly>=1.1.1",
     "pre-commit>=4.2.0,<5",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
 ]
 
 [build-system]
@@ -45,4 +47,7 @@ exclude = ["pyobs_aravis/aravis.py"]
 
 [tool.pyrefly]
 python-version = "3.11"
-project-excludes = ["pyobs_aravis/aravis.py"]
+project-excludes = ["pyobs_aravis/aravis.py", "pyobs_aravis/gui.py"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"

@@ -37,7 +37,10 @@ class AravisCamera(BaseVideo, IExposureTime):
         """Initializes a new AravisCamera.
 
         Args:
-            device: Name of camera to connect to.
+            device: Name or IP address of camera to connect to. An IP address connects directly,
+                without relying on the network's broadcast-based device discovery -- useful on
+                networks that block or drop that broadcast traffic even though unicast GVCP
+                control traffic works fine (verify with e.g. `arv-tool-0.8 -a <ip> features`).
             settings: Dictionary of camera settings to apply on connect.
             buffers: Number of acquisition buffers.
         """
@@ -58,25 +61,12 @@ class AravisCamera(BaseVideo, IExposureTime):
 
     async def open(self) -> None:
         """Open module."""
-        from . import aravis
-
         await BaseVideo.open(self)
 
-        # device discovery is a blocking, network-based scan (GigE Vision/USB3 Vision devices
-        # reply to a broadcast query) that can take multiple seconds -- run it like the other
-        # aravis/GLib calls (see _run_blocking) instead of freezing the whole module's event
-        # loop, and with it, the ability to respond to any other module, for that long
-        ids: list[str] = []
-
-        def _list_device_ids() -> None:
-            ids.extend(aravis.get_device_ids())  # type: ignore[arg-type]
-
-        if not await self._run_blocking(_list_device_ids):
-            raise TimeoutError(f"Timed out listing available cameras after {_SDK_CALL_TIMEOUT}s.")
-
-        if self._camera_device_name not in ids:
-            raise ValueError("Could not find given device name in list of available cameras.")
-
+        # connecting (see _open_camera) validates the device itself -- no separate discovery
+        # pre-check here, since that relies on a network-wide broadcast query that some networks
+        # block or drop even though unicast GVCP control traffic (i.e. the actual connection)
+        # works fine
         await self.activate_camera()
 
         # publish initial exposure-time state -- otherwise a caller doing wait_for_state()
@@ -122,22 +112,30 @@ class AravisCamera(BaseVideo, IExposureTime):
 
         Returns:
             True if func completed within timeout, False if it's still running in the background.
+
+        Raises:
+            Whatever exception func() raised, if it completed within timeout.
         """
         loop = asyncio.get_running_loop()
         future: asyncio.Future[None] = loop.create_future()
+        error: list[BaseException] = []
 
         def _wrapper() -> None:
             try:
                 func()
+            except BaseException as exc:
+                error.append(exc)
             finally:
                 loop.call_soon_threadsafe(future.set_result, None)
 
         threading.Thread(target=_wrapper, daemon=True).start()
         try:
             await asyncio.wait_for(future, timeout=timeout)
-            return True
         except TimeoutError:
             return False
+        if error:
+            raise error[0]
+        return True
 
     async def _activate_camera(self) -> None:
         """Open camera on activation."""
