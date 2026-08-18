@@ -6,6 +6,7 @@ Just in case the repo goes offline sometime. Some changes were applied.
 
 import time
 import logging
+import threading
 import numpy as np
 import ctypes
 import gi
@@ -52,6 +53,10 @@ class Camera(object):
             raise AravisException("Error creating buffer")
         self._frame = None
         self._last_payload = 0
+        # guards self.stream against a shutdown() on another thread deleting it mid-access
+        # (e.g. pop_frame() polling in a background thread while the module deactivates)
+        self._lock = threading.Lock()
+        self._closed = False
 
     def __getattr__(self, name):
         if hasattr(
@@ -156,8 +161,11 @@ class Camera(object):
         if not payload:
             payload = self.cam.get_payload()
         self.logger.info("Creating %s memory buffers of size %s", nb, payload)
-        for _ in range(0, nb):
-            self.stream.push_buffer(Aravis.Buffer.new_allocate(payload))
+        with self._lock:
+            if self._closed:
+                return
+            for _ in range(0, nb):
+                self.stream.push_buffer(Aravis.Buffer.new_allocate(payload))
 
     def pop_frame(self, timestamp=False):
         while (
@@ -180,19 +188,22 @@ class Camera(object):
         """
         return the oldest frame in the aravis buffer
         """
-        buf = self.stream.try_pop_buffer()
-        if buf:
-            frame = self._array_from_buffer_address(buf)
-            self.stream.push_buffer(buf)
-            if timestamp:
-                return buf.get_timestamp(), frame
+        with self._lock:
+            if self._closed:
+                return (None, None) if timestamp else None
+            buf = self.stream.try_pop_buffer()
+            if buf:
+                frame = self._array_from_buffer_address(buf)
+                self.stream.push_buffer(buf)
+                if timestamp:
+                    return buf.get_timestamp(), frame
+                else:
+                    return frame
             else:
-                return frame
-        else:
-            if timestamp:
-                return None, None
-            else:
-                return None
+                if timestamp:
+                    return None, None
+                else:
+                    return None
 
     def _array_from_buffer_address(self, buf):
         if not buf:
@@ -250,9 +261,13 @@ class Camera(object):
 
     def shutdown(self):
         # Delete the objects on shutdown: socket will be closed!
-        del self.stream
-        del self.dev
-        del self.cam
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            del self.stream
+            del self.dev
+            del self.cam
 
 
 def get_device_ids():
