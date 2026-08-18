@@ -227,9 +227,13 @@ class AravisCamera(BaseVideo, IExposureTime):
             exposure_time: Exposure time in seconds.
         """
         await self.activate_camera()
-        await self._run_blocking(
-            lambda: self._camera.set_exposure_time(exposure_time * 1e6)  # type: ignore[union-attr]
-        )
+
+        def _set() -> None:
+            # take the device lock so this can't race _close_camera() tearing down self._camera
+            with self._device_lock:
+                self._camera.set_exposure_time(exposure_time * 1e6)  # type: ignore[union-attr]
+
+        await self._run_blocking(_set)
         self._exposure_time = exposure_time
         await self.comm.set_state(IExposureTime, ExposureTimeState(exposure_time=exposure_time))
 
