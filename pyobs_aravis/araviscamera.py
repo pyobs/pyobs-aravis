@@ -51,6 +51,11 @@ class AravisCamera(BaseVideo, IExposureTime):
         self._camera: aravis.Camera | None = None
         self._settings: dict[str, Any] = {} if settings is None else settings
         self._camera_lock = asyncio.Lock()
+        # Serializes access to self._camera between the SDK threads spawned by _run_blocking:
+        # the background poll thread (_wait_for_frame) reads frames from the camera while
+        # _open_camera/_close_camera set/tear down the same object, and those run on other
+        # daemon threads rather than the event loop, so the async _camera_lock can't cover them.
+        self._device_lock = threading.Lock()
         self._buffers = buffers
         self._exposure_time: float = 0.0
 
@@ -83,25 +88,27 @@ class AravisCamera(BaseVideo, IExposureTime):
         from . import aravis
 
         log.info("Connecting to camera %s...", self._camera_device_name)
-        self._camera = aravis.Camera(self._camera_device_name)  # type: ignore[assignment]
-        log.info("Connected.")
+        with self._device_lock:
+            self._camera = aravis.Camera(self._camera_device_name)  # type: ignore[assignment]
+            log.info("Connected.")
 
-        for key, value in self._settings.items():
-            log.info("Setting value %s=%s...", key, value)
-            self._camera.set_feature(key, value)  # type: ignore[union-attr]
+            for key, value in self._settings.items():
+                log.info("Setting value %s=%s...", key, value)
+                self._camera.set_feature(key, value)  # type: ignore[union-attr]
 
-        self._camera.start_acquisition_continuous(nb_buffers=self._buffers)  # type: ignore[union-attr]
+            self._camera.start_acquisition_continuous(nb_buffers=self._buffers)  # type: ignore[union-attr]
 
     def _close_camera(self) -> None:
         """Close camera."""
-        if self._camera is not None:
-            log.info("Closing camera...")
-            try:
-                self._camera.stop_acquisition()  # type: ignore[union-attr]
-                self._camera.shutdown()  # type: ignore[union-attr]
-            except Exception:
-                log.exception("Error closing camera.")
-        self._camera = None
+        with self._device_lock:
+            if self._camera is not None:
+                log.info("Closing camera...")
+                try:
+                    self._camera.stop_acquisition()  # type: ignore[union-attr]
+                    self._camera.shutdown()  # type: ignore[union-attr]
+                except Exception:
+                    log.exception("Error closing camera.")
+            self._camera = None
 
     @staticmethod
     async def _run_blocking(func: Callable[[], None], timeout: float = _SDK_CALL_TIMEOUT) -> bool:
@@ -178,8 +185,8 @@ class AravisCamera(BaseVideo, IExposureTime):
     async def _wait_for_frame(self, timeout: float = _FRAME_WAIT_TIMEOUT) -> npt.NDArray[Any] | None:
         """Waits for the next frame without blocking the event loop.
 
-        Polls pop_frame() from a background thread (see _run_blocking) rather than polling it
-        directly from the async loop with a sleep in between each attempt -- pop_frame() is
+        Polls try_pop_frame() from a background thread (see _run_blocking) rather than polling it
+        directly from the async loop with a sleep in between each attempt -- try_pop_frame() is
         assumed non-blocking in the common case, but if the underlying aravis/GLib call ever
         doesn't honor that (camera hiccup, network stall for GigE Vision), polling it directly
         would freeze the whole module for as long as that lasts, repeatedly, for the module's
@@ -192,10 +199,16 @@ class AravisCamera(BaseVideo, IExposureTime):
         result: list[npt.NDArray[Any]] = []
 
         def _poll() -> None:
-            camera = self._camera
-            while camera is not None:
-                frame = camera.pop_frame()  # type: ignore[union-attr]
-                # pop_frame() can return a non-None array that's empty along axis 0 instead of
+            while True:
+                # Hold the device lock only for the (non-blocking) try_pop_frame() call and the
+                # camera reference check, so _close_camera() running on another thread can take the
+                # lock between polls and tear the camera down without racing a mid-frame read.
+                with self._device_lock:
+                    camera = self._camera
+                    if camera is None:
+                        return
+                    frame = camera.try_pop_frame()  # type: ignore[union-attr]
+                # try_pop_frame() can return a non-None array that's empty along axis 0 instead of
                 # None -- treat that the same as "not ready yet" rather than a real frame
                 if frame is not None and frame.size != 0:  # type: ignore[union-attr]
                     result.append(frame)  # type: ignore[arg-type]
@@ -214,7 +227,13 @@ class AravisCamera(BaseVideo, IExposureTime):
             exposure_time: Exposure time in seconds.
         """
         await self.activate_camera()
-        self._camera.set_exposure_time(exposure_time * 1e6)  # type: ignore[union-attr]
+
+        def _set() -> None:
+            # take the device lock so this can't race _close_camera() tearing down self._camera
+            with self._device_lock:
+                self._camera.set_exposure_time(exposure_time * 1e6)  # type: ignore[union-attr]
+
+        await self._run_blocking(_set)
         self._exposure_time = exposure_time
         await self.comm.set_state(IExposureTime, ExposureTimeState(exposure_time=exposure_time))
 
