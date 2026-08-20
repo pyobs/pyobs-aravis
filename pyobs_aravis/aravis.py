@@ -209,14 +209,53 @@ class Camera(object):
         if not buf:
             return None
         pixel_format = buf.get_image_pixel_format()
+        # The pixel format value packs total bits per pixel into bits 16-23 (see
+        # ARV_PIXEL_FORMAT_BIT_PER_PIXEL) and a component count category into bits 24-31
+        # (1 = single-plane mono/Bayer, 2 = multi-component colour). Mono 10/12/14-bit depths
+        # are stored in 16-bit samples (bits_per_pixel == 16), so they need no special case here.
         bits_per_pixel = pixel_format >> 16 & 0xFF
-        if bits_per_pixel == 8:
-            INTP = ctypes.POINTER(ctypes.c_uint8)
+        num_components = pixel_format >> 24 & 0xFF
+        height = buf.get_image_height()
+        width = buf.get_image_width()
+
+        if num_components == 1:
+            # mono or Bayer: one sample per pixel
+            if bits_per_pixel == 8:
+                INTP = ctypes.POINTER(ctypes.c_uint8)
+            elif bits_per_pixel == 16:
+                INTP = ctypes.POINTER(ctypes.c_uint16)
+            else:
+                raise AravisException(
+                    "Unsupported pixel format %#x (%d bits per pixel)" % (pixel_format, bits_per_pixel)
+                )
+            shape = (height, width)
+        elif num_components == 2:
+            # colour: interleaved channels; reshape to (height, width, channels) rather than
+            # flattening every channel into a single mono array
+            if pixel_format in (Aravis.PIXEL_FORMAT_RGB_8_PACKED, Aravis.PIXEL_FORMAT_BGR_8_PACKED):
+                INTP = ctypes.POINTER(ctypes.c_uint8)
+                shape = (height, width, 3)
+            elif pixel_format in (Aravis.PIXEL_FORMAT_RGBA_8_PACKED, Aravis.PIXEL_FORMAT_BGRA_8_PACKED):
+                INTP = ctypes.POINTER(ctypes.c_uint8)
+                shape = (height, width, 4)
+            elif pixel_format in (
+                Aravis.PIXEL_FORMAT_RGB_10_PACKED,
+                Aravis.PIXEL_FORMAT_BGR_10_PACKED,
+                Aravis.PIXEL_FORMAT_RGB_12_PACKED,
+                Aravis.PIXEL_FORMAT_BGR_12_PACKED,
+            ):
+                INTP = ctypes.POINTER(ctypes.c_uint16)
+                shape = (height, width, 3)
+            else:
+                raise AravisException(
+                    "Unsupported pixel format %#x (%d bits per pixel)" % (pixel_format, bits_per_pixel)
+                )
         else:
-            INTP = ctypes.POINTER(ctypes.c_uint16)
+            raise AravisException("Unsupported pixel format %#x (%d bits per pixel)" % (pixel_format, bits_per_pixel))
+
         addr = buf.get_data()
         ptr = ctypes.cast(addr, INTP)
-        im = np.ctypeslib.as_array(ptr, (buf.get_image_height(), buf.get_image_width()))
+        im = np.ctypeslib.as_array(ptr, shape)
         im = im.copy()
         return im
 
@@ -260,11 +299,19 @@ class Camera(object):
         self.cam.stop_acquisition()
 
     def shutdown(self):
-        # Delete the objects on shutdown: socket will be closed!
+        # Explicitly stop acquisition, then release the Aravis objects. stop_acquisition()
+        # tells the camera to stop streaming; dropping the stream/device/camera releases our
+        # GObject references so the underlying GigE socket is closed when the device is
+        # finalized. Serialized against try_pop_frame() by self._lock, so a poll in a
+        # background thread can't be mid-read while we tear the objects down.
         with self._lock:
             if self._closed:
                 return
             self._closed = True
+            try:
+                self.cam.stop_acquisition()
+            except Exception:
+                self.logger.exception("Error stopping acquisition during shutdown.")
             del self.stream
             del self.dev
             del self.cam
