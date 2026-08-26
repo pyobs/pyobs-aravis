@@ -2320,7 +2320,7 @@ wheels = [
 
 [[package]]
 name = "pyobs-aravis"
-version = "2.0.0.dev17"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -2347,8 +2347,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.2.5,<3" },
-    { name = "pyobs-core", specifier = ">=2.0.0.dev48,<3" },
-    { name = "pyobs-core", extras = ["gui"], marker = "extra == 'gui'", specifier = ">=2.0.0.dev48,<3" },
+    { name = "pyobs-core", specifier = ">=2.0.0,<3" },
+    { name = "pyobs-core", extras = ["gui"], marker = "extra == 'gui'", specifier = ">=2.0.0,<3" },
     { name = "qasync", marker = "extra == 'gui'", specifier = ">=0.28.0" },
 ]
 provides-extras = ["gui"]
@@ -2365,7 +2365,7 @@ dev = [
 
 [[package]]
 name = "pyobs-core"
-version = "2.0.0.dev72"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2397,9 +2397,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d7/25/ac1a0571461eb87655374a38a4a21983db407f7239d60adce009e4ba8438/pyobs_core-2.0.0.dev72.tar.gz", hash = "sha256:b9ac8679bb9a72d1180ba60a97ad08b1878b1bc6b21158754d1f7fc7033231ee", size = 354347, upload-time = "2026-08-10T11:31:59.746Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/35/57654254c92f7264454a527abc317742995189ee7d7a2d9c6c5b32c90fc5/pyobs_core-2.0.0.tar.gz", hash = "sha256:87b77406f907a9fecb4630a45c002e354134e3c8b11a51e436289489bbb18fe6", size = 374158, upload-time = "2026-08-26T11:44:08.181Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8e/6a/570856f6149a611d7e4858e980faa1e23c5ddedda22327808f8e3eb5b413/pyobs_core-2.0.0.dev72-py3-none-any.whl", hash = "sha256:321f6b80f2fb8703e3cbf2f62cea2333cb475b1a50f58d8900176644fe6ca6b2", size = 576647, upload-time = "2026-08-10T11:31:57.813Z" },
+    { url = "https://files.pythonhosted.org/packages/35/11/e8af2e0f099a16808ef1f42d398af73bc6c3935501f08a83f6628503e679/pyobs_core-2.0.0-py3-none-any.whl", hash = "sha256:3e97cc12d653978c3d963d41b984702a3169914776ef970d0fa21619d5cb3df6", size = 596861, upload-time = "2026-08-26T11:44:06.642Z" },
 ]
 
 [package.optional-dependencies]
