@@ -6,8 +6,10 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy.typing as npt
+from pyobs.images import Image
 from pyobs.interfaces import ExposureTimeState, IExposureTime
 from pyobs.modules.camera import BaseVideo
+from pyobs.utils.enums import ImageType
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +84,18 @@ class AravisCamera(BaseVideo, IExposureTime):
         """Close the module."""
         await BaseVideo.close(self)
         await self._deactivate_camera()
+
+    async def _finish_image(self, image: Image, broadcast: bool, image_type: ImageType) -> tuple[Image, str]:
+        """Add device identity/settings headers, then finish up as usual (BaseVideo has no
+        per-frame header hook of its own, so this is the earliest point after add_fits_headers()
+        and before the image is serialized to bytes)."""
+        image.header["INSTRUME"] = (self._camera_device_name, "Name of instrument")
+        for key, value in self._settings.items():
+            if key.lower() == "gain":
+                image.header["GAIN"] = (value, "Gain used for exposure")
+            elif key.lower() == "triggermode":
+                image.header["TRIGMODE"] = (value, "Trigger mode used for exposure")
+        return await super()._finish_image(image, broadcast, image_type)
 
     def _open_camera(self) -> None:
         """Open camera."""
