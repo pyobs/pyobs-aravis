@@ -174,7 +174,6 @@ class AravisCamera(BaseVideo, IExposureTime):
 
     async def _capture(self) -> None:
         """Take new images in loop."""
-        last = time.time()
         while True:
             try:
                 if self._camera is None or not self.camera_active:
@@ -186,11 +185,9 @@ class AravisCamera(BaseVideo, IExposureTime):
                     # camera went away, or the wait timed out -- back off and retry
                     continue
 
-                if time.time() - last < self._interval:
-                    await asyncio.sleep(0.01)
-                    continue
-
-                last = time.time()
+                # deliver every frame -- BaseVideo's video_handler/_set_image() already
+                # throttle the live-view JPEG output to self._interval on their own, and
+                # grab_stack()/grab_data()/the raw stream all need the real per-frame rate
                 await self._set_image(frame)
 
             except Exception:
