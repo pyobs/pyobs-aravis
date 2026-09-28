@@ -248,5 +248,10 @@ class AravisCamera(BaseVideo, IExposureTime):
         self._exposure_time = exposure_time
         await self.comm.set_state(IExposureTime, ExposureTimeState(exposure_time=exposure_time))
 
+    async def reset(self, **kwargs: Any) -> None:
+        """Reset image type, data pipeline and exposure time to their defaults."""
+        await BaseVideo.reset(self, **kwargs)
+        await self.set_exposure_time(0.0)
+
 
 __all__ = ["AravisCamera"]
