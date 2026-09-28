@@ -4,10 +4,27 @@ wrapper. gi/Aravis are not needed for these.
 
 import asyncio
 import threading
+from unittest.mock import AsyncMock
 
 import pytest
+from pyobs.modules.camera import BaseVideo
 
 from pyobs_aravis import AravisCamera
+
+
+@pytest.mark.asyncio
+async def test_reset_restores_exposure_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    # AravisCamera.__init__ imports gi/Aravis, unavailable here -- __new__ skips it, since
+    # reset() only touches self.set_exposure_time and the (monkeypatched) base reset().
+    camera = AravisCamera.__new__(AravisCamera)
+    base_reset = AsyncMock()
+    monkeypatch.setattr(BaseVideo, "reset", base_reset)
+    camera.set_exposure_time = AsyncMock()  # type: ignore[method-assign]
+
+    await camera.reset()
+
+    base_reset.assert_awaited_once_with(camera)
+    camera.set_exposure_time.assert_awaited_once_with(0.0)
 
 
 @pytest.mark.asyncio
