@@ -2347,8 +2347,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.2.5,<3" },
-    { name = "pyobs-core", specifier = ">=2.2.0,<3" },
-    { name = "pyobs-core", extras = ["gui"], marker = "extra == 'gui'", specifier = ">=2.2.0,<3" },
+    { name = "pyobs-core", specifier = ">=2.11.0,<3" },
+    { name = "pyobs-core", extras = ["gui"], marker = "extra == 'gui'", specifier = ">=2.11.0,<3" },
     { name = "qasync", marker = "extra == 'gui'", specifier = ">=0.28.0" },
 ]
 provides-extras = ["gui"]
@@ -2365,7 +2365,7 @@ dev = [
 
 [[package]]
 name = "pyobs-core"
-version = "2.10.3"
+version = "2.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2397,9 +2397,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b8/3a/2c3d76a1b8ca96f689d34da610d96325292fdaac9df0c7d34451f2cb30c1/pyobs_core-2.10.3.tar.gz", hash = "sha256:27c965f626b6ef2502eda630da6841e7977ad29c65b6299a0403a4ed22eb7e12", size = 420378, upload-time = "2026-09-18T09:15:10.904Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/54/98a984ebfa490943ec5db1de36213db6a51535af5fe51f1522cc2d3788c0/pyobs_core-2.12.0.tar.gz", hash = "sha256:2dd4d33c307462e5b0f79f38569903818327fb630ec24aecb91fc628aac03919", size = 437883, upload-time = "2026-09-27T18:39:08.997Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/6b/0471ea25d46df94cc7c65d67e35ed52a851432978dc58a69bda8ec58bca9/pyobs_core-2.10.3-py3-none-any.whl", hash = "sha256:4ff3c86e23a86ab41541aedb25fa17e46bab832822097adccdb503de76454feb", size = 652925, upload-time = "2026-09-18T09:15:09.374Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/df/4638dc8ea08bd3545af9b2f12335e01292c2c90d3563457a7466a33fe9e6/pyobs_core-2.12.0-py3-none-any.whl", hash = "sha256:c941c414a0a6b69a3758e4fdf9addae4da8347cd978740e3e35261e2cb82581a", size = 675107, upload-time = "2026-09-27T18:39:07.298Z" },
 ]
 
 [package.optional-dependencies]
