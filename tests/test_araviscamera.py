@@ -4,7 +4,7 @@ wrapper. gi/Aravis are not needed for these.
 
 import asyncio
 import threading
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pyobs.modules.camera import BaseVideo
@@ -57,3 +57,36 @@ async def test_run_blocking_reraises_func_exception() -> None:
 
     with pytest.raises(ValueError, match="camera not found"):
         await AravisCamera._run_blocking(failing)
+
+
+@pytest.mark.asyncio
+async def test_run_blocking_late_completion_does_not_raise() -> None:
+    # a func finishing after the timeout must not call set_result on the cancelled future
+    done = threading.Event()
+    errors: list[dict[str, object]] = []
+    asyncio.get_running_loop().set_exception_handler(lambda loop, ctx: errors.append(ctx))
+
+    def slow() -> None:
+        done.wait()
+
+    assert await AravisCamera._run_blocking(slow, timeout=0.01) is False
+    done.set()
+    await asyncio.sleep(0.05)
+
+    assert errors == []
+
+
+@pytest.mark.asyncio
+async def test_wait_for_frame_timeout_does_not_leak_threads() -> None:
+    # the camera never delivers a frame, so every wait times out
+    camera = AravisCamera.__new__(AravisCamera)
+    camera._device_lock = threading.Lock()
+    camera._camera = MagicMock()
+    camera._camera.try_pop_frame.return_value = None
+    before = threading.active_count()
+
+    for _ in range(5):
+        assert await camera._wait_for_frame(timeout=0.05) is None
+    await asyncio.sleep(0.1)
+
+    assert threading.active_count() == before

@@ -147,7 +147,8 @@ class AravisCamera(BaseVideo, IExposureTime):
             except BaseException as exc:
                 error.append(exc)
             finally:
-                loop.call_soon_threadsafe(future.set_result, None)
+                # after a timeout, wait_for() has already cancelled the future
+                loop.call_soon_threadsafe(lambda: future.done() or future.set_result(None))
 
         threading.Thread(target=_wrapper, daemon=True).start()
         try:
@@ -208,9 +209,11 @@ class AravisCamera(BaseVideo, IExposureTime):
             The next frame, or None if the camera disappeared mid-wait or the wait timed out.
         """
         result: list[npt.NDArray[Any]] = []
+        # set on timeout, so the abandoned poll thread exits instead of polling forever
+        stop = threading.Event()
 
         def _poll() -> None:
-            while True:
+            while not stop.is_set():
                 # Hold the device lock only for the (non-blocking) try_pop_frame() call and the
                 # camera reference check, so _close_camera() running on another thread can take the
                 # lock between polls and tear the camera down without racing a mid-frame read.
@@ -227,6 +230,7 @@ class AravisCamera(BaseVideo, IExposureTime):
                 time.sleep(0.01)
 
         if not await self._run_blocking(_poll, timeout=timeout):
+            stop.set()
             log.error("Timed out waiting for a frame after %.1fs.", timeout)
             return None
         return result[0] if result else None
