@@ -1,6 +1,6 @@
 # AravisCamera: migrate to `BaseVideo.frames()`
 
-Status: proposed (2026-09-29). Not started.
+Status: Phase 1 implemented (2026-09-29), not released. Phase 0 (hardware) and 2 open.
 
 Needs pyobs-core `>=2.13.0` (`frames()`, `Frame`, `_new_generation()`, PR #926). No pyobs-core
 changes.
@@ -49,10 +49,12 @@ its migration order), issue #56.
    exposed with the old settings, plus the one currently exposing. Cost is one restart per change
    (duration unknown, measure in Phase 0). Rejected: on-the-fly change plus time-based skipping,
    which needs trustworthy start times (see 5) and is fragile with queued buffers.
-4. **Generation is stamped at pop time, bumped after the restart.** The reader reads
-   `self._generation` when it pops a frame. The setter bumps it on the event loop after the
-   restart returns. Frames popped between restart and bump get the old generation, which is
-   conservative (one extra frame skipped), never wrong.
+4. **Generation is stamped at pop time, bumped inside the restart.** The reader reads the
+   generation and exposure time under `_device_lock` when it pops a frame. `_apply_settings()`
+   sets the read-back exposure time and bumps the generation while still holding that lock,
+   before restarting acquisition, so every frame popped afterwards carries the new values. Since
+   bumps now come from SDK threads too, `AravisCamera._new_generation()` wraps the base one in a
+   `threading.Lock`.
 5. **Start times: `estimated` by default.** `ArvBuffer.get_timestamp()` is, as far as I know, the
    camera's own clock (ns since power-on or since the last timestamp reset) unless the camera
    runs PTP, and the point in the exposure where it's latched is model-dependent (**unverified**).
@@ -80,27 +82,27 @@ its migration order), issue #56.
 - [ ] Confirm whether the `ExposureTime` read-back differs from the requested value
       (quantization), to know whether decision 5's read-back matters in practice.
 
-## Phase 1: implementation
+## Phase 1: implementation (done)
 
-- [ ] Bump pin to `pyobs-core>=2.13.0`.
-- [ ] `_open_camera()`: drop `start_acquisition_continuous()`.
-- [ ] New `async def frames()`: start acquisition (via `_run_blocking`, under `_device_lock`),
+- [x] Bump pin to `pyobs-core>=2.13.0`.
+- [x] `_open_camera()`: drop `start_acquisition_continuous()`.
+- [x] New `async def frames()`: start acquisition (via `_run_blocking`, under `_device_lock`),
       start the reader thread, `yield Frame(data, start=None, exposure_time=<read-back>,
       generation=<stamped at pop>)` from the queue; `finally`: stop event, `stop_acquisition()`
       via `_run_blocking` (timeout logged, not raised).
-- [ ] Reader thread: poll `try_pop_frame()` under `_device_lock`, 10ms sleep when empty, exit on
+- [x] Reader thread: poll `try_pop_frame()` under `_device_lock`, 10ms sleep when empty, exit on
       stop event or `self._camera is None`. Queue bounded (e.g. `maxsize=buffers`), drop oldest
       when full, so a stalled event loop can't grow memory. (`_array_from_buffer_address()`
       already copies before the buffer is pushed back, so ownership per the core contract is
       fine.)
-- [ ] No-frame watchdog: log a warning after `_FRAME_WAIT_TIMEOUT` without frames (keeps
+- [x] No-frame watchdog: log a warning after `_FRAME_WAIT_TIMEOUT` without frames (keeps
       today's "Timed out waiting for a frame" signal), don't raise.
-- [ ] `_apply_settings(func)` helper (decision 6); `set_exposure_time()` uses it; bump generation
+- [x] `_apply_settings(func)` helper (decision 6); `set_exposure_time()` uses it; bump generation
       in `_activate_camera()` after connect.
-- [ ] Delete `_capture()`, `_wait_for_frame()`, the `add_background_task(self._capture)`
+- [x] Delete `_capture()`, `_wait_for_frame()`, the `add_background_task(self._capture)`
       registration and the per-frame use of `_run_blocking` (keep `_run_blocking` itself for
       one-off SDK calls). Changelog entry for decision 7.
-- [ ] Tests (no gi/Aravis, fake camera object like the existing tests): frames delivered in
+- [x] Tests (no gi/Aravis, fake camera object like the existing tests): frames delivered in
       order; `aclose()` stops the reader thread (`threading.active_count()` back to baseline);
       `set_exposure_time()` bumps the generation and no frame popped after the bump carries the
       old one; read-back value lands in `Frame.exposure_time`; bounded queue drops oldest.
@@ -112,6 +114,16 @@ its migration order), issue #56.
       (PTP directly, or a latched offset via `GevTimestampControlLatch`/`GevTimestampValue`,
       re-latched periodically) and set `Frame.start`. Update the Aravis row of pyobs-core's
       `basevideo-frame-source.md` with the measured semantics.
+
+Implementation notes:
+- `Frame` isn't exported from `pyobs.modules.camera` in 2.13.0, imported from
+  `pyobs.modules.camera.videoframes` instead.
+- `frames()` is annotated `AsyncGenerator[Frame, None]` (narrower than the base's
+  `AsyncIterator`), so callers can `aclose()` it.
+- New `Camera.flush()` in `aravis.py` hands queued buffers back to the stream.
+- `_open_camera()` reads back the exposure time and bumps the generation on connect; the
+  read-back only logs a warning if it fails.
+- A subclass that still defines `_capture()` gets an error logged in `__init__`.
 
 ## Verification
 

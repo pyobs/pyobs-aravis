@@ -2,13 +2,12 @@ import asyncio
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
-import numpy.typing as npt
 from pyobs.images import Image
 from pyobs.interfaces import ExposureTimeState, IExposureTime
-from pyobs.modules.camera import BaseVideo
+from pyobs.modules.camera import BaseVideo, Frame
 from pyobs.utils.enums import ImageType
 
 log = logging.getLogger(__name__)
@@ -18,9 +17,8 @@ log = logging.getLogger(__name__)
 # rather than let a single dead camera freeze the whole module.
 _SDK_CALL_TIMEOUT = 5.0
 
-# pop_frame() is polled from _capture() and is expected to legitimately take a while (up to the
-# camera's own frame interval/exposure time), unlike the other SDK calls above -- a much more
-# generous timeout than _SDK_CALL_TIMEOUT, so normal operation never trips it.
+# frames() warns if no frame arrived for this long. Frames legitimately take up to the camera's
+# own frame interval/exposure time, so this is much more generous than _SDK_CALL_TIMEOUT.
 _FRAME_WAIT_TIMEOUT = 30.0
 
 
@@ -53,18 +51,24 @@ class AravisCamera(BaseVideo, IExposureTime):
         self._camera: aravis.Camera | None = None
         self._settings: dict[str, Any] = {} if settings is None else settings
         self._camera_lock = asyncio.Lock()
-        # Serializes access to self._camera between the SDK threads spawned by _run_blocking:
-        # the background poll thread (_wait_for_frame) reads frames from the camera while
-        # _open_camera/_close_camera set/tear down the same object, and those run on other
-        # daemon threads rather than the event loop, so the async _camera_lock can't cover them.
+        # Serializes access to self._camera between the SDK threads spawned by _run_blocking and
+        # the reader thread in frames(): they run on daemon threads rather than the event loop,
+        # so the async _camera_lock can't cover them.
         self._device_lock = threading.Lock()
+        # generation bumps come from SDK threads (under _device_lock) and from the event loop
+        self._generation_lock = threading.Lock()
         self._buffers = buffers
         self._exposure_time: float = 0.0
+        # whether frames() has acquisition running, so _apply_settings() knows to restart it
+        self._acquiring = False
 
-        if device is not None:
-            self.add_background_task(self._capture)
-        else:
+        if device is None:
             log.error("No device name given, not connecting to any camera.")
+        if hasattr(type(self), "_capture"):
+            log.error(
+                "%s overrides _capture(), which AravisCamera no longer runs; implement frames() instead.",
+                type(self).__name__,
+            )
 
     async def open(self) -> None:
         """Open module."""
@@ -110,7 +114,12 @@ class AravisCamera(BaseVideo, IExposureTime):
                 log.info("Setting value %s=%s...", key, value)
                 self._camera.set_feature(key, value)  # type: ignore[union-attr]
 
-            self._camera.start_acquisition_continuous(nb_buffers=self._buffers)  # type: ignore[union-attr]
+            # a new connection with (re)applied settings: frames from before don't count anymore
+            try:
+                self._exposure_time = self._camera.get_exposure_time() / 1e6  # type: ignore[union-attr]
+            except Exception:
+                log.warning("Could not read exposure time from camera.", exc_info=True)
+            self._new_generation()
 
     def _close_camera(self) -> None:
         """Close camera."""
@@ -173,67 +182,118 @@ class AravisCamera(BaseVideo, IExposureTime):
                 log.error("Timed out closing camera after %.1fs, abandoning cleanup.", _SDK_CALL_TIMEOUT)
                 self._camera = None
 
-    async def _capture(self) -> None:
-        """Take new images in loop."""
-        while True:
-            try:
-                if self._camera is None or not self.camera_active:
-                    await asyncio.sleep(0.1)
-                    continue
+    def _new_generation(self) -> int:
+        """Start a new settings generation, thread-safe (called from SDK threads, too)."""
+        with self._generation_lock:
+            return super()._new_generation()
 
-                frame = await self._wait_for_frame()
-                if frame is None:
-                    # camera went away, or the wait timed out -- back off and retry
-                    continue
+    async def frames(self) -> AsyncGenerator[Frame, None]:
+        """Start acquisition and yield frames until BaseVideo closes the iterator.
 
-                # deliver every frame -- BaseVideo's video_handler/_set_image() already
-                # throttle the live-view JPEG output to self._interval on their own, and
-                # grab_stack()/grab_data()/the raw stream all need the real per-frame rate
-                await self._set_image(frame)
-
-            except Exception:
-                await asyncio.sleep(1)
-
-    async def _wait_for_frame(self, timeout: float = _FRAME_WAIT_TIMEOUT) -> npt.NDArray[Any] | None:
-        """Waits for the next frame without blocking the event loop.
-
-        Polls try_pop_frame() from a background thread (see _run_blocking) rather than polling it
-        directly from the async loop with a sleep in between each attempt -- try_pop_frame() is
-        assumed non-blocking in the common case, but if the underlying aravis/GLib call ever
-        doesn't honor that (camera hiccup, network stall for GigE Vision), polling it directly
-        would freeze the whole module for as long as that lasts, repeatedly, for the module's
-        entire runtime. Runs the whole "poll until ready" loop as a single blocking call instead,
-        so only one thread gets spawned per delivered frame rather than one per 10ms poll.
-
-        Returns:
-            The next frame, or None if the camera disappeared mid-wait or the wait timed out.
+        A single reader thread polls try_pop_frame() for the whole activation and hands frames to
+        the event loop, instead of one thread per frame. Each frame is stamped with the settings
+        generation and exposure time in effect when it was popped, read under the same lock that
+        _apply_settings() holds while it restarts acquisition, so the stamp is always right.
         """
-        result: list[npt.NDArray[Any]] = []
-        # set on timeout, so the abandoned poll thread exits instead of polling forever
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[Frame] = asyncio.Queue(maxsize=self._buffers)
         stop = threading.Event()
 
-        def _poll() -> None:
+        def _start() -> None:
+            with self._device_lock:
+                if self._camera is None:
+                    raise RuntimeError("Camera not connected.")
+                self._camera.start_acquisition_continuous(nb_buffers=self._buffers)
+                self._acquiring = True
+
+        def _put(frame: Frame) -> None:
+            # latest wins: a stalled event loop mustn't grow memory
+            if queue.full():
+                queue.get_nowait()
+            queue.put_nowait(frame)
+
+        def _read() -> None:
             while not stop.is_set():
-                # Hold the device lock only for the (non-blocking) try_pop_frame() call and the
-                # camera reference check, so _close_camera() running on another thread can take the
-                # lock between polls and tear the camera down without racing a mid-frame read.
+                # Hold the device lock only for the (non-blocking) try_pop_frame() call, so
+                # _apply_settings()/_close_camera() can take it between polls.
                 with self._device_lock:
                     camera = self._camera
                     if camera is None:
                         return
-                    frame = camera.try_pop_frame()  # type: ignore[union-attr]
+                    data = camera.try_pop_frame()
+                    generation, exposure_time = self.generation, self._exposure_time
                 # try_pop_frame() can return a non-None array that's empty along axis 0 instead of
                 # None -- treat that the same as "not ready yet" rather than a real frame
-                if frame is not None and frame.size != 0:  # type: ignore[union-attr]
-                    result.append(frame)  # type: ignore[arg-type]
-                    return
-                time.sleep(0.01)
+                if data is not None and data.size != 0:
+                    frame = Frame(data=data, exposure_time=exposure_time, generation=generation)
+                    try:
+                        loop.call_soon_threadsafe(_put, frame)
+                    except RuntimeError:
+                        # event loop closed (shutdown)
+                        return
+                else:
+                    time.sleep(0.01)
 
-        if not await self._run_blocking(_poll, timeout=timeout):
+        def _stop() -> None:
+            with self._device_lock:
+                self._acquiring = False
+                if self._camera is not None:
+                    self._camera.stop_acquisition()
+                    self._camera.flush()
+
+        if not await self._run_blocking(_start):
+            raise TimeoutError("Timed out starting acquisition.")
+        threading.Thread(target=_read, daemon=True).start()
+        try:
+            while True:
+                try:
+                    frame = await asyncio.wait_for(queue.get(), timeout=_FRAME_WAIT_TIMEOUT)
+                except TimeoutError:
+                    log.warning("No frame from camera for %.1fs.", _FRAME_WAIT_TIMEOUT)
+                    continue
+                yield frame
+        finally:
+            # don't join the reader: if it hangs in the SDK, it must not block deactivation
             stop.set()
-            log.error("Timed out waiting for a frame after %.1fs.", timeout)
-            return None
-        return result[0] if result else None
+            try:
+                if not await self._run_blocking(_stop):
+                    log.error("Timed out stopping acquisition after %.1fs.", _SDK_CALL_TIMEOUT)
+            except Exception:
+                log.exception("Error stopping acquisition.")
+
+    async def _apply_settings(self, func: Callable[[Any], None]) -> None:
+        """Change camera settings and start a new settings generation.
+
+        Restarts a running acquisition around func(), flushing the frames still queued in the
+        stream, since those were exposed with the old settings. The exposure time is read back
+        afterwards, as the camera may round it. Subclasses use this for their own setters.
+
+        Args:
+            func: Called with the aravis camera, under the device lock, on an SDK thread.
+
+        Raises:
+            RuntimeError: If the camera is not connected.
+            TimeoutError: If the SDK didn't respond in time.
+        """
+
+        def _apply() -> None:
+            with self._device_lock:
+                camera = self._camera
+                if camera is None:
+                    raise RuntimeError("Camera not connected.")
+                if self._acquiring:
+                    camera.stop_acquisition()
+                    camera.flush()
+                try:
+                    func(camera)
+                    self._exposure_time = camera.get_exposure_time() / 1e6
+                    self._new_generation()
+                finally:
+                    if self._acquiring:
+                        camera.start_acquisition_continuous(nb_buffers=self._buffers)
+
+        if not await self._run_blocking(_apply):
+            raise TimeoutError("Timed out applying camera settings.")
 
     async def set_exposure_time(self, exposure_time: float, **kwargs: Any) -> None:
         """Set the exposure time in seconds.
@@ -242,15 +302,8 @@ class AravisCamera(BaseVideo, IExposureTime):
             exposure_time: Exposure time in seconds.
         """
         await self.activate_camera()
-
-        def _set() -> None:
-            # take the device lock so this can't race _close_camera() tearing down self._camera
-            with self._device_lock:
-                self._camera.set_exposure_time(exposure_time * 1e6)  # type: ignore[union-attr]
-
-        await self._run_blocking(_set)
-        self._exposure_time = exposure_time
-        await self.comm.set_state(IExposureTime, ExposureTimeState(exposure_time=exposure_time))
+        await self._apply_settings(lambda camera: camera.set_exposure_time(exposure_time * 1e6))
+        await self.comm.set_state(IExposureTime, ExposureTimeState(exposure_time=self._exposure_time))
 
     async def reset(self, **kwargs: Any) -> None:
         """Reset image type, data pipeline and exposure time to their defaults."""

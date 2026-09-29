@@ -59,9 +59,7 @@ class Camera(object):
         self._closed = False
 
     def __getattr__(self, name):
-        if hasattr(
-            self.cam, name
-        ):  # expose methods from the aravis camera object which is also relatively high level
+        if hasattr(self.cam, name):  # expose methods from the aravis camera object which is also relatively high level
             return getattr(self.cam, name)
         # elif hasattr(self.dev, name): #epose methods from the aravis device object, this might be confusing
         #    return getattr(self.dev, name)
@@ -96,9 +94,7 @@ class Camera(object):
         genicam = self.dev.get_genicam()
         node = genicam.get_node(name)
         if not node:
-            raise AravisException(
-                "Feature {} does not seem to exist in camera".format(name)
-            )
+            raise AravisException("Feature {} does not seem to exist in camera".format(name))
         return node.get_node_name()
 
     def get_feature(self, name):
@@ -147,9 +143,7 @@ class Camera(object):
         if ntype == "Enumeration":
             return self.dev.get_available_enumeration_feature_values_as_strings(name)
         else:
-            raise AravisException(
-                "{} is not an enumeration but a {}".format(name, ntype)
-            )
+            raise AravisException("{} is not an enumeration but a {}".format(name, ntype))
 
     def read_register(self, address):
         return self.dev.read_register(address)
@@ -168,9 +162,7 @@ class Camera(object):
                 self.stream.push_buffer(Aravis.Buffer.new_allocate(payload))
 
     def pop_frame(self, timestamp=False):
-        while (
-            True
-        ):  # loop in python in order to allow interrupt, have the loop in C might hang
+        while True:  # loop in python in order to allow interrupt, have the loop in C might hang
             if timestamp:
                 ts, frame = self.try_pop_frame(timestamp)
             else:
@@ -204,6 +196,19 @@ class Camera(object):
                     return None, None
                 else:
                     return None
+
+    def flush(self):
+        """
+        discard all completed frames still queued in the stream, handing their buffers back
+        """
+        with self._lock:
+            if self._closed:
+                return
+            while True:
+                buf = self.stream.try_pop_buffer()
+                if not buf:
+                    return
+                self.stream.push_buffer(buf)
 
     def _array_from_buffer_address(self, buf):
         if not buf:
@@ -282,9 +287,7 @@ class Camera(object):
 
     def start_acquisition_trigger(self, nb_buffers=1):
         self.set_feature("AcquisitionMode", "Continuous")  # no acquisition limits
-        self.set_feature(
-            "TriggerSource", "Software"
-        )  # wait for trigger t acquire image
+        self.set_feature("TriggerSource", "Software")  # wait for trigger t acquire image
         self.set_feature("TriggerMode", "On")  # Not documented but necesary
         self.start_acquisition(nb_buffers)
 
