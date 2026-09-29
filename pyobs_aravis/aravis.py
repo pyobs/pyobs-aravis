@@ -184,6 +184,12 @@ class Camera(object):
             if self._closed:
                 return (None, None) if timestamp else None
             buf = self.stream.try_pop_buffer()
+            if buf and buf.get_status() != Aravis.BufferStatus.SUCCESS:
+                # incomplete frame (e.g. missing packets on GigE): its image metadata is unusable,
+                # so hand the buffer straight back instead of converting it
+                self.logger.warning("Dropping incomplete frame (status: %s).", buf.get_status().value_nick)
+                self.stream.push_buffer(buf)
+                buf = None
             if buf:
                 frame = self._array_from_buffer_address(buf)
                 self.stream.push_buffer(buf)
