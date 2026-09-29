@@ -207,6 +207,26 @@ async def test_frames_drops_oldest_when_consumer_is_slow() -> None:
 
 
 @pytest.mark.asyncio
+async def test_frames_raises_when_reader_fails() -> None:
+    # an exception in the reader thread must end frames(), not leave it waiting for frames forever
+    fake = FakeCamera([_frame(0)])
+    camera = _camera(fake)
+    iterator = camera.frames()
+    await anext(iterator)
+
+    def failing() -> None:
+        raise ValueError("Unsupported pixel format 0")
+
+    fake.try_pop_frame = failing  # type: ignore[method-assign,assignment]
+    with pytest.raises(ValueError, match="Unsupported pixel format"):
+        await asyncio.wait_for(anext(iterator), timeout=1.0)
+
+    # acquisition was stopped on the way out
+    assert fake.calls == ["start", "stop", "flush"]
+    assert camera._acquiring is False
+
+
+@pytest.mark.asyncio
 async def test_apply_settings_without_camera_raises() -> None:
     camera = _camera(FakeCamera())
     camera._camera = None

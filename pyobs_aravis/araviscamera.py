@@ -196,7 +196,8 @@ class AravisCamera(BaseVideo, IExposureTime):
         _apply_settings() holds while it restarts acquisition, so the stamp is always right.
         """
         loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[Frame] = asyncio.Queue(maxsize=self._buffers)
+        # frames, or the exception that ended the reader thread
+        queue: asyncio.Queue[Frame | Exception] = asyncio.Queue(maxsize=self._buffers)
         stop = threading.Event()
 
         def _start() -> None:
@@ -206,13 +207,25 @@ class AravisCamera(BaseVideo, IExposureTime):
                 self._camera.start_acquisition_continuous(nb_buffers=self._buffers)
                 self._acquiring = True
 
-        def _put(frame: Frame) -> None:
+        def _put(item: Frame | Exception) -> None:
             # latest wins: a stalled event loop mustn't grow memory
             if queue.full():
                 queue.get_nowait()
-            queue.put_nowait(frame)
+            queue.put_nowait(item)
 
         def _read() -> None:
+            # an exception would silently end this thread and leave frames() waiting forever, so
+            # hand it over to frames() instead, which raises it and lets BaseVideo restart
+            try:
+                _read_loop()
+            except Exception as e:
+                try:
+                    loop.call_soon_threadsafe(_put, e)
+                except RuntimeError:
+                    # event loop closed (shutdown)
+                    pass
+
+        def _read_loop() -> None:
             while not stop.is_set():
                 # Hold the device lock only for the (non-blocking) try_pop_frame() call, so
                 # _apply_settings()/_close_camera() can take it between polls.
@@ -247,11 +260,13 @@ class AravisCamera(BaseVideo, IExposureTime):
         try:
             while True:
                 try:
-                    frame = await asyncio.wait_for(queue.get(), timeout=_FRAME_WAIT_TIMEOUT)
+                    item = await asyncio.wait_for(queue.get(), timeout=_FRAME_WAIT_TIMEOUT)
                 except TimeoutError:
                     log.warning("No frame from camera for %.1fs.", _FRAME_WAIT_TIMEOUT)
                     continue
-                yield frame
+                if isinstance(item, Exception):
+                    raise item
+                yield item
         finally:
             # don't join the reader: if it hangs in the SDK, it must not block deactivation
             stop.set()
