@@ -149,19 +149,42 @@ async def test_frames_yields_in_order_and_stops_acquisition_on_close() -> None:
 
 
 @pytest.mark.asyncio
-async def test_set_exposure_time_restarts_acquisition_and_bumps_generation() -> None:
+async def test_set_exposure_time_during_acquisition_sets_live_and_bumps_generation() -> None:
     fake = FakeCamera()
     camera = _camera(fake)
     camera._acquiring = True
 
     await camera.set_exposure_time(0.5)
 
-    assert fake.calls == ["stop", "flush", ("set", 500000.0), "start"]
+    # no restart: some GigE cameras deliver no frames for a long time after one
+    assert fake.calls == [("set", 500000.0), "flush"]
     assert camera.generation == 1
     # the read-back value, not the requested one
     assert camera._exposure_time == fake.exposure_us / 1e6 != 0.5
     state = camera.comm.set_state.await_args.args[1]  # type: ignore[attr-defined]
     assert state.exposure_time == camera._exposure_time
+
+
+@pytest.mark.asyncio
+async def test_set_exposure_time_restarts_acquisition_if_camera_rejects_live_change() -> None:
+    fake = FakeCamera()
+    camera = _camera(fake)
+    camera._acquiring = True
+    set_exposure_time = fake.set_exposure_time
+
+    def reject_while_acquiring(us: float) -> None:
+        if "stop" not in fake.calls:
+            fake.calls.append(("rejected", us))
+            raise RuntimeError("feature locked during acquisition")
+        set_exposure_time(us)
+
+    fake.set_exposure_time = reject_while_acquiring  # type: ignore[method-assign]
+
+    await camera.set_exposure_time(0.5)
+
+    assert fake.calls == [("rejected", 500000.0), "stop", "flush", ("set", 500000.0), "start"]
+    assert camera.generation == 1
+    assert camera._exposure_time == fake.exposure_us / 1e6
 
 
 @pytest.mark.asyncio

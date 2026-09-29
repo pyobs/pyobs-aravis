@@ -279,8 +279,12 @@ class AravisCamera(BaseVideo, IExposureTime):
     async def _apply_settings(self, func: Callable[[Any], None]) -> None:
         """Change camera settings and start a new settings generation.
 
-        Restarts a running acquisition around func(), flushing the frames still queued in the
-        stream, since those were exposed with the old settings. The exposure time is read back
+        During acquisition, func() is applied while the camera keeps streaming, and the frames
+        still queued in the stream are flushed, since those were exposed with the old settings.
+        Only if the camera rejects that, acquisition is stopped around func() -- some GigE cameras
+        (e.g. the IAG VT fibercamera) then deliver no frames for up to a minute, so a restart is
+        the last resort. The one frame exposing during the change may carry the new generation
+        although exposed (partly) with the old settings. The exposure time is read back
         afterwards, as the camera may round it. Subclasses use this for their own setters.
 
         Args:
@@ -296,16 +300,22 @@ class AravisCamera(BaseVideo, IExposureTime):
                 camera = self._camera
                 if camera is None:
                     raise RuntimeError("Camera not connected.")
-                if self._acquiring:
-                    camera.stop_acquisition()
-                    camera.flush()
-                try:
+                if not self._acquiring:
                     func(camera)
-                    self._exposure_time = camera.get_exposure_time() / 1e6
-                    self._new_generation()
-                finally:
-                    if self._acquiring:
-                        camera.start_acquisition_continuous(nb_buffers=self._buffers)
+                else:
+                    try:
+                        func(camera)
+                        camera.flush()
+                    except Exception:
+                        log.info("Camera rejected setting during acquisition, restarting acquisition for it.")
+                        camera.stop_acquisition()
+                        camera.flush()
+                        try:
+                            func(camera)
+                        finally:
+                            camera.start_acquisition_continuous(nb_buffers=self._buffers)
+                self._exposure_time = camera.get_exposure_time() / 1e6
+                self._new_generation()
 
         if not await self._run_blocking(_apply):
             raise TimeoutError("Timed out applying camera settings.")
