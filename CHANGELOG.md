@@ -9,7 +9,8 @@ Entries for releases before this file existed were generated from commit subject
 
 ## [2.1.2] - 2026-09-29
 
-- Change settings during acquisition without restarting it
+- Change settings during acquisition without restarting it (a restart is only the fallback if the camera
+  rejects the change), since restarting made the IAG VT fibercamera deliver no frames for up to a minute
 
 ## [2.1.1] - 2026-09-29
 
@@ -17,7 +18,9 @@ Entries for releases before this file existed were generated from commit subject
 
 ## [2.1.0] - 2026-09-29
 
-- Migrate AravisCamera to BaseVideo.frames()
+- Migrate AravisCamera to BaseVideo.frames(). Breaking for subclasses: `_capture()` and `_wait_for_frame()`
+  are gone, and a subclass overriding `_capture()` no longer gets its loop run (an error is logged in
+  `__init__`). Override `frames()` and wrap `super().frames()` instead. Needs pyobs-core>=2.13.
 - specs: plan for migrating AravisCamera to BaseVideo.frames()
 - Stop _wait_for_frame from leaking a polling thread on every timeout (#56)
 
