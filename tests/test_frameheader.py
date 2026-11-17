@@ -29,7 +29,7 @@ async def test_module_header_has_instrument_gain_and_trigger_mode(monkeypatch: p
 
 
 def test_gui_header_has_exposure_time_and_gain() -> None:
-    gui = pytest.importorskip("pyobs_aravis.gui")
+    gui = pytest.importorskip("pyobs_aravis.gui", exc_type=ImportError)
     camera = MagicMock()
     camera.get_exposure_time.return_value = 20000.0
     camera.get_feature.return_value = 4.0
@@ -39,7 +39,7 @@ def test_gui_header_has_exposure_time_and_gain() -> None:
 
 
 def test_gui_header_without_gain_feature() -> None:
-    gui = pytest.importorskip("pyobs_aravis.gui")
+    gui = pytest.importorskip("pyobs_aravis.gui", exc_type=ImportError)
     camera = MagicMock()
     camera.get_exposure_time.return_value = 20000.0
     camera.get_feature.side_effect = KeyError("Gain")
