@@ -7,6 +7,7 @@ from typing import Any, TypeVar
 import qasync  # type: ignore
 from astropy.io import fits
 from numpy.typing import NDArray
+from pyobs.utils.frameheader import FrameSettings, make_frame_header
 from pyobs.utils.gui.camera import DataDisplayWidget, ExposeWidget, ExposureTimeWidget, ListPickerDialog
 from PySide6 import QtWidgets  # type: ignore[import-untyped]
 
@@ -38,11 +39,42 @@ async def _run_blocking(func: Callable[[], _T]) -> _T:
     return await future
 
 
+def make_header(camera: aravis.Camera, device: str, data: NDArray[Any]) -> fits.Header:
+    """Builds the FITS header for a frame, reading exposure time and gain from the camera (blocking).
+
+    There is no DATE-OBS: the GUI only knows when a frame arrived, not when its exposure started.
+
+    Args:
+        camera: Camera to read the settings from.
+        device: Device id, used as instrument name.
+        data: The frame.
+
+    Returns:
+        The header.
+    """
+    gain: float | None
+    try:
+        value = camera.get_feature("Gain")
+        gain = None if value is None else float(value)
+    except Exception:
+        # the camera may not have a feature of that name
+        gain = None
+    return make_frame_header(
+        FrameSettings(
+            exposure_time=camera.get_exposure_time() / 1e6,
+            instrument=device,
+            gain=gain,
+            data=data,
+        )
+    )
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, device: str) -> None:
         super().__init__()
         self.setWindowTitle(f"Aravis Camera — {device}")
 
+        self.device = device
         self.camera: aravis.Camera | None = None
         self._last_frame: NDArray[Any] | None = None
         self._preview_task: asyncio.Task[None] | None = None
@@ -77,6 +109,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.exposure_time.spin_exposure_time.setValue(exposure_time / 1e6)
         self._preview_task = asyncio.ensure_future(self._live_preview())
 
+    async def _show_frame(self, frame: NDArray[Any]) -> None:
+        camera = self.camera
+        if camera is None:
+            return
+        header = await _run_blocking(lambda: make_header(camera, self.device, frame))
+        self.display.set_data(fits.PrimaryHDU(frame, header=header))
+
     @qasync.asyncSlot(float)  # type: ignore
     async def _exposure_time_changed(self, value: float) -> None:
         if self.camera is not None:
@@ -87,8 +126,9 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.camera is None:
                 await asyncio.sleep(0.05)
                 continue
-            self._last_frame = await _run_blocking(self.camera.pop_frame)
-            self.display.set_data(fits.PrimaryHDU(self._last_frame))
+            frame = await _run_blocking(self.camera.pop_frame)
+            self._last_frame = frame
+            await self._show_frame(frame)
             await asyncio.sleep(0.05)
 
     @qasync.asyncSlot(int)  # type: ignore
@@ -98,8 +138,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.expose.start_exposure(self.exposure_time.value)
         for _ in range(count):
             self._last_frame = await _run_blocking(self.camera.pop_frame)
-        if self._last_frame is not None:
-            self.display.set_data(fits.PrimaryHDU(self._last_frame))
+        last_frame = self._last_frame
+        if last_frame is not None:
+            await self._show_frame(last_frame)
         self.expose.set_exposures_left()
 
     def closeEvent(self, event: Any) -> None:

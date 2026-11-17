@@ -1,8 +1,9 @@
 # AravisCamera: migrate to `BaseVideo.frames()`
 
-Status: Phase 1 implemented (2026-09-29), not released. Phase 0 (hardware) and 2 open.
+Status: implemented, released in v2.1.0 (2026-09-29), refined in v2.1.2 (see Deviations). Phase 0
+(hardware checks) and Phase 2 (device timestamps) still open.
 
-Needs pyobs-core `>=2.13.0` (`frames()`, `Frame`, `_new_generation()`, PR #926). No pyobs-core
+Needs pyobs-core `>=2.13.0` (pinned `>=2.13.1` as of v2.1.4) (`frames()`, `Frame`, `_new_generation()`, PR #926). No pyobs-core
 changes.
 
 Related: pyobs-core `specs/design/basevideo-frame-source.md` (the `frames()` contract, step 2 of
@@ -29,10 +30,25 @@ its migration order), issue #56.
 
 ## Prerequisites
 
-- #56 fix in `_wait_for_frame()`/`_run_blocking()` plus tests (done, uncommitted as of
-  2026-09-29). Worth releasing on its own before this plan.
+- #56 fix in `_wait_for_frame()`/`_run_blocking()` plus tests (done, closed). Shipped together with
+  this migration in v2.1.0 instead of on its own.
+
+## Deviations from this plan (as implemented)
+
+- **Decision 3 was reversed in v2.1.2.** `_apply_settings()` applies the change while acquisition
+  keeps running and only flushes the queued buffers. It stops/restarts acquisition only if the
+  camera rejects the change. Reason: restarting made the IAG VT fibercamera deliver no frames for
+  up to a minute after every exposure time change (e.g. on each acquisition step). The restart
+  timing check in Phase 0 is therefore moot for that camera.
+- **Decision 4 changed accordingly.** The generation is bumped after the setting and the flush,
+  not inside a restart. The one frame exposing during the change may carry the new generation
+  although it was exposed (partly) with the old settings, so the old-to-new exposure race from
+  "Problem" point 2 is narrowed, not closed. Going from a long to a short exposure is the
+  visible case.
 
 ## Design decisions
+
+(As originally planned. Decisions 3 and 4 are superseded, see Deviations.)
 
 1. **One long-lived reader thread per activation, not one per frame.** `frames()` starts a daemon
    thread that polls `try_pop_frame()` under `_device_lock` and hands frames to the event loop
@@ -59,7 +75,7 @@ its migration order), issue #56.
    camera's own clock (ns since power-on or since the last timestamp reset) unless the camera
    runs PTP, and the point in the exposure where it's latched is model-dependent (**unverified**).
    So `Frame.start=None`, and `exposure_time` is the value **read back** from the camera after
-   setting it (cameras quantize), not the requested one. Device timestamps are Phase 3, only if
+   setting it (cameras quantize), not the requested one. Device timestamps are Phase 2, only if
    Phase 0 shows they're usable.
 6. **Every image-affecting setting bumps the generation.** In `AravisCamera` that's
    `set_exposure_time()` and a (re)connect with `settings` applied (bump in `_activate_camera()`).
@@ -78,7 +94,7 @@ its migration order), issue #56.
       cameras. If it's seconds rather than ~100ms, revisit decision 3.
 - [ ] Check whether the cameras expose PTP (`arv-tool-0.8 -a <ip> features | grep -i -E
       "ptp|1588"`), and compare `buf.get_timestamp()` / `buf.get_system_timestamp()` against host
-      time over a few minutes (offset, drift). Result decides whether Phase 3 happens.
+      time over a few minutes (offset, drift). Result decides whether Phase 2 happens.
 - [ ] Confirm whether the `ExposureTime` read-back differs from the requested value
       (quantization), to know whether decision 5's read-back matters in practice.
 
@@ -106,7 +122,7 @@ its migration order), issue #56.
       order; `aclose()` stops the reader thread (`threading.active_count()` back to baseline);
       `set_exposure_time()` bumps the generation and no frame popped after the bump carries the
       old one; read-back value lands in `Frame.exposure_time`; bounded queue drops oldest.
-- [ ] Release, coordinated with downstream subclasses (decision 7).
+- [x] Release (v2.1.0). Coordination with downstream subclasses (decision 7) is not tracked here.
 
 ## Phase 2 (optional, depends on Phase 0): device timestamps
 
