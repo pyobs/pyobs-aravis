@@ -9,9 +9,20 @@ Entries for releases before this file existed were generated from commit subject
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-17
+
 - The GUI writes a FITS header into the frames it saves (it was empty): exposure time, instrument, gain and data
   statistics, no `DATE-OBS` because it only knows when a frame arrived. `AravisCamera` and the GUI build the header cards
   with `make_frame_header` from pyobs-core. Needs pyobs-core 2.28.0 (the pin in `pyproject.toml` is still 2.13.1).
+
+## [2.1.4] - 2026-10-04
+
+- Put the email on the copyright line of `LICENSE`, so that GitHub detects the MIT license.
+- Dependency updates.
+
+## [2.1.3] - 2026-10-04
+
+- Added `CONTRIBUTING.md` and this changelog, and the readme and project URLs to the package metadata.
 
 ## [2.1.2] - 2026-09-29
 
