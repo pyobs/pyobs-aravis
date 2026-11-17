@@ -9,6 +9,7 @@ from pyobs.images import Image
 from pyobs.interfaces import ExposureTimeState, IExposureTime
 from pyobs.modules.camera import BaseVideo, Frame
 from pyobs.utils.enums import ImageType
+from pyobs.utils.frameheader import FrameSettings, make_frame_header
 
 log = logging.getLogger(__name__)
 
@@ -93,11 +94,10 @@ class AravisCamera(BaseVideo, IExposureTime):
         """Add device identity/settings headers, then finish up as usual (BaseVideo has no
         per-frame header hook of its own, so this is the earliest point after add_fits_headers()
         and before the image is serialized to bytes)."""
-        image.header["INSTRUME"] = (self._camera_device_name, "Name of instrument")
+        gain = next((value for key, value in self._settings.items() if key.lower() == "gain"), None)
+        image.header.update(make_frame_header(FrameSettings(instrument=self._camera_device_name, gain=gain)))
         for key, value in self._settings.items():
-            if key.lower() == "gain":
-                image.header["GAIN"] = (value, "Gain used for exposure")
-            elif key.lower() == "triggermode":
+            if key.lower() == "triggermode":
                 image.header["TRIGMODE"] = (value, "Trigger mode used for exposure")
         return await super()._finish_image(image, broadcast, image_type)
 
